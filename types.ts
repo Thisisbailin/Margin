@@ -30,6 +30,15 @@ export interface Sentence {
   tokens: WordOccurrence[];
 }
 
+// Stats for a specific word lemma across the project
+export interface VocabularyStat {
+  lemma: string;
+  familiarity: Familiarity;
+  reviewCount: number; // How many times reviewed
+  definition?: string; // AI generated definition (persisted)
+  lastReviewDate?: number;
+}
+
 export interface Book {
   id: string;
   title: string;
@@ -45,6 +54,8 @@ export interface Project {
   description: string;
   books: Book[]; // Max 9
   activeBookId?: string;
+  // Source of truth for word mastery and definitions
+  vocabularyStats: Record<string, VocabularyStat>; 
 }
 
 export interface AgentMessage {
@@ -59,4 +70,37 @@ export interface AssessmentWord {
   word: string;
   difficulty: 'easy' | 'medium' | 'hard';
   context: string;
+}
+
+// NEW: Structured Context for the Agent
+export interface AnnotationContext {
+  targetSentence: string;
+  surroundingContext: string; // Previous 2 sentences + Next 2 sentences
+  bookTitle: string;
+  author: string;
+  projectName: string;
+  projectDescription: string;
+  proficiency: UserProficiency;
+}
+
+// NEW: Lexicon Engine Types
+export interface LexiconItem {
+  lemma: string;
+  count: number; // Frequency in the entire project
+  familiarity: Familiarity;
+  reviewCount: number; // NEW
+  definition?: string; // NEW
+  occurrences: {
+    sentenceText: string;
+    bookTitle: string;
+    wordText: string;
+    wordId: string;
+  }[];
+}
+
+export type FrequencyBand = 'core' | 'essential' | 'niche';
+
+export interface StudyFilter {
+  band: FrequencyBand | 'all';
+  status: 'new' | 'review' | 'mastered' | 'all'; // Changed 'learning' to 'review' for clarity
 }

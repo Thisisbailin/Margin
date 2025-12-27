@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { AgentMessage, UserProficiency } from '../types';
+import SkeletonLoader from './SkeletonLoader';
 
 interface MarginSidebarProps {
   messages: AgentMessage[];
@@ -15,20 +16,10 @@ const MarginSidebar: React.FC<MarginSidebarProps> = ({
 }) => {
   
   return (
-    <div className="h-full flex flex-col font-sans pt-4">
+    <div className="h-full flex flex-col font-sans pt-0">
       
-      {/* Header */}
-      <div className="mb-8 flex items-baseline justify-between border-b border-gray-200 pb-2">
-        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">
-          Margin Notes
-        </span>
-        <span className="text-[10px] text-gray-400 uppercase tracking-widest">
-           {proficiency === UserProficiency.Advanced ? 'Deep Read' : 'Analysis'}
-        </span>
-      </div>
-
       {/* Content Area */}
-      <div className="flex-1 space-y-10 pb-10">
+      <div className="flex-1 space-y-10 pb-10 mt-6">
         {messages.length === 0 && !isLoading && (
           <div className="flex flex-col items-center justify-center h-64 text-gray-300 text-center px-6">
             <span className="text-4xl font-display italic opacity-20 mb-4">M</span>
@@ -62,12 +53,8 @@ const MarginSidebar: React.FC<MarginSidebarProps> = ({
                    /* Rich Text Rendering */
                    <ReactMarkdown>{msg.content}</ReactMarkdown>
                 ) : (
-                   /* Skeleton Loader State for Smooth Streaming Start */
-                   <div className="space-y-3 mt-2 animate-pulse-slow">
-                      <div className="h-2 bg-gray-200 rounded-full w-3/4"></div>
-                      <div className="h-2 bg-gray-200 rounded-full w-full"></div>
-                      <div className="h-2 bg-gray-200 rounded-full w-5/6"></div>
-                   </div>
+                   /* Skeleton Loader State */
+                   <SkeletonLoader className="mt-2" />
                 )
               ) : (
                 msg.content
@@ -81,7 +68,7 @@ const MarginSidebar: React.FC<MarginSidebarProps> = ({
           </div>
         ))}
 
-        {/* Global Loading Indicator (fallback, usually handled by skeleton above) */}
+        {/* Global Loading Indicator (fallback) */}
         {isLoading && messages.length > 0 && messages[0].role !== 'agent' && (
            <div className="pl-4 mt-4">
              <div className="text-[10px] text-gray-300 animate-pulse uppercase tracking-widest">Thinking...</div>

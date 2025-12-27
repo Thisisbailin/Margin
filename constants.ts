@@ -50,5 +50,6 @@ export const MOCK_PROJECT: Project = {
   name: 'Critical Theory & Visual Culture',
   description: 'Exploring the intersection of labor, aesthetics, and the institution.',
   books: MOCK_BOOKS,
-  activeBookId: '1'
+  activeBookId: '1',
+  vocabularyStats: {} // Initial empty state
 };

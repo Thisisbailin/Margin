@@ -8,6 +8,7 @@ interface LayoutShellProps {
   title: string;
   children: ReactNode;
   expandedContent?: ReactNode;
+  headerContent?: ReactNode; // NEW: Custom content for the sidebar header (Tabs/Title)
   collapsedPeerTrigger?: {
     label: string;
     icon: ReactNode;
@@ -22,6 +23,7 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
   title,
   children,
   expandedContent,
+  headerContent,
   collapsedPeerTrigger
 }) => {
   // --- Resizing Logic ---
@@ -121,19 +123,17 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
   }
 
   // 3. DEFAULT (SIDEBAR) STATE
-  // We use inline styles for width to allow dragging, but only on desktop (md+)
   return (
     <aside 
       ref={sidebarRef}
       style={{ width: window.innerWidth >= 768 ? width : '100%' }}
       className={`
         flex-shrink-0 flex flex-col 
-        bg-surface/60 backdrop-blur-sm 
+        bg-surface/80 backdrop-blur-md 
         relative overflow-hidden 
         border-b md:border-b-0
         ${side === 'left' ? 'md:border-r border-black/5' : 'md:border-l border-black/5'}
         w-full h-[40vh] md:h-full
-        /* Disable transition during resize for instant feedback */
         ${isResizing ? 'transition-none' : 'transition-all duration-700 ease-[cubic-bezier(0.25,0.8,0.25,1)]'}
       `}
     >
@@ -146,7 +146,6 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
           ${side === 'left' ? 'right-0' : 'left-0'}
         `}
       >
-        {/* Visual indicator on hover */}
         <div className={`
           absolute top-1/2 -translate-y-1/2 w-[3px] h-8 bg-gray-300 rounded-full opacity-0 group-hover:opacity-100 transition-opacity
           ${side === 'left' ? 'right-0.5' : 'left-0.5'}
@@ -154,27 +153,21 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
       </div>
 
       <div className="flex flex-col h-full w-full animate-fade-in">
-        {/* Sidebar Toolbar */}
-        <div className="flex justify-between items-center px-6 py-4 md:py-6 group border-b border-transparent hover:border-black/5 transition-colors flex-shrink-0">
+        {/* Unified Navigation/Toolbar Header */}
+        <div className="flex justify-between items-center px-6 h-14 border-b border-black/5 flex-shrink-0 bg-paper/50 backdrop-blur-sm sticky top-0 z-20">
           
-          {/* Collapse Button */}
-          <button 
-            onClick={() => onStateChange('collapsed')}
-            className="text-gray-300 hover:text-ink transition-colors p-2 -ml-2 rounded-full hover:bg-black/5"
-            title={`Collapse ${title}`}
-          >
-             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d={side === 'left' ? "M15.75 19.5L8.25 12l7.5-7.5" : "M8.25 4.5l7.5 7.5-7.5 7.5"} />
-            </svg>
-          </button>
+          {/* LEFT: Content (Title or Tabs) */}
+          <div className="flex-1 flex items-center min-w-0 mr-4">
+             {headerContent}
+          </div>
 
-          {/* Right Side Actions */}
-          <div className="flex items-center gap-1">
+          {/* RIGHT: Unified Action Group (Peer Trigger + Window Controls) */}
+          <div className="flex items-center gap-2 text-gray-400">
             {collapsedPeerTrigger && (
               <>
                 <button
                   onClick={collapsedPeerTrigger.onClick}
-                  className="text-gray-400 hover:text-accent transition-colors p-2 rounded-full hover:bg-accent/5 flex items-center gap-2"
+                  className="text-gray-400 hover:text-accent transition-colors p-1.5 rounded hover:bg-accent/10"
                   title={collapsedPeerTrigger.label}
                 >
                   <span className="w-4 h-4">{collapsedPeerTrigger.icon}</span>
@@ -185,17 +178,27 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
 
             <button 
               onClick={() => onStateChange('expanded')}
-              className="text-gray-300 hover:text-ink transition-colors p-2 -mr-2 rounded-full hover:bg-black/5"
+              className="p-1.5 hover:text-ink transition-colors rounded hover:bg-black/5"
               title="Maximize"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
               </svg>
             </button>
+
+            <button 
+              onClick={() => onStateChange('collapsed')}
+              className="p-1.5 hover:text-ink transition-colors rounded hover:bg-black/5"
+              title="Collapse"
+            >
+               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d={side === 'left' ? "M15.75 19.5L8.25 12l7.5-7.5" : "M8.25 4.5l7.5 7.5-7.5 7.5"} />
+              </svg>
+            </button>
           </div>
         </div>
 
-        {/* Content with internal padding */}
+        {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 md:px-8 pb-10 scroll-smooth no-scrollbar">
            {children}
         </div>
