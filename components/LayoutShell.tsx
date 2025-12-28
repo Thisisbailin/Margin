@@ -86,8 +86,9 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
   if (state === 'expanded') {
     return (
       <aside className="fixed inset-0 z-50 bg-paper animate-fade-in flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-6 md:p-16 lg:p-24 no-scrollbar">
-           <div className="max-w-[1400px] mx-auto h-full flex flex-col">
+        {/* Zero top padding for header positioning */}
+        <div className="flex-1 overflow-hidden px-6 md:px-12 lg:px-20 pt-0 pb-0">
+           <div className="max-w-[1600px] mx-auto h-full flex flex-col relative pt-4 md:pt-6">
               {expandedContent || children}
            </div>
         </div>
@@ -124,7 +125,7 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
         `} />
       </div>
 
-      <div className="flex flex-col h-full w-full animate-fade-in">
+      <div className="flex flex-col h-full w-full animate-fade-in relative">
         <div className="flex justify-between items-center px-6 h-14 border-b border-black/5 flex-shrink-0 bg-paper/50 backdrop-blur-sm sticky top-0 z-20">
           <div className="flex-1 flex items-center min-w-0 mr-4">
              {headerContent}
@@ -162,7 +163,7 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 md:px-8 pb-10 scroll-smooth no-scrollbar">
+        <div className="flex-1 overflow-y-auto scroll-smooth no-scrollbar">
            {children}
         </div>
       </div>

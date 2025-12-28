@@ -1,8 +1,5 @@
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { UserProficiency, Project, AnnotationContext, AgentMessage } from "../types";
-
-// Obtaining API key and initializing client.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 type OnStreamUpdate = (fullText: string) => void;
 
@@ -22,6 +19,9 @@ export const streamAnnotation = async (
   userPrompt: string,
   onUpdate: OnStreamUpdate
 ): Promise<string> => {
+  // Initialize right before use to ensure process.env.API_KEY is available
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
   if (!process.env.API_KEY) {
     const mockResponse = `结合《${contextData.bookTitle}》语境：作者在这里使用了微妙的呼应。1. 微观视角：词语选择精准。2. 项目关联：呼应了“${contextData.projectName}”中的核心问题。`;
     let currentText = "";
@@ -55,6 +55,8 @@ export const streamProjectChat = async (
   history: AgentMessage[],
   onUpdate: OnStreamUpdate
 ): Promise<string> => {
+   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
    if (!process.env.API_KEY) {
       const mock = `这是一个基于“${project.name}”的洞察。你提到的关于《${project.books[0].title}》的问题触及了核心。我们尝试构建一种关于“社会生产力”的讨论。`;
       let currentText = "";
@@ -89,6 +91,7 @@ export const streamProjectAdvice = async (
   project: Project,
   onUpdate: OnStreamUpdate
 ): Promise<string> => {
+   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
    if (!process.env.API_KEY) {
       const mock = `建议：先确立核心论点，再追溯历史。`;
       let currentText = "";
@@ -109,6 +112,7 @@ export const streamProjectAdvice = async (
 };
 
 export const generateWordDefinition = async (word: string): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   if (!process.env.API_KEY) {
     await new Promise(r => setTimeout(r, 500));
     return `**${word}**\n\n1. (n.) 模拟释义.`;
