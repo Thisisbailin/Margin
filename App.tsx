@@ -7,26 +7,29 @@ import ProjectContext from './components/ProjectContext';
 import LayoutShell from './components/LayoutShell';
 import ProficiencyModal from './components/ProficiencyModal';
 import LexisDeck from './components/LexisDeck';
-import { streamAnnotation, streamProjectAdvice, generateWordDefinition } from './services/geminiService';
+import { streamAnnotation, streamProjectAdvice, generateWordDefinition, streamProjectChat } from './services/geminiService';
+import ReactMarkdown from 'react-markdown';
 
 const App: React.FC = () => {
   // --- Global Config ---
   const [leftPanelState, setLeftPanelState] = useState<PanelState>('default');
   const [rightPanelState, setRightPanelState] = useState<PanelState>('default');
   
-  // Zen Mode Calculation: Both panels are collapsed
+  const [focusView, setFocusView] = useState<'project' | 'lexis'>('project');
+  const [isSwitcherExpanded, setIsSwitcherExpanded] = useState(false);
+
   const isZenMode = leftPanelState === 'collapsed' && rightPanelState === 'collapsed';
-
-  // Left Panel Mode: 'library' (Books) or 'lexis' (Vocabulary)
-  const [leftPanelMode, setLeftPanelMode] = useState<'library' | 'lexis'>('library');
-
   const [userProficiency, setUserProficiency] = useState<UserProficiency | null>(null);
 
   // --- Data State ---
   const [activeProject, setActiveProject] = useState<Project>(MOCK_PROJECT);
   const [activeBook, setActiveBook] = useState<Book | undefined>(MOCK_PROJECT.books[0]);
-  const [projectAdvice, setProjectAdvice] = useState<string>("");
-  const [isGeneratingAdvice, setIsGeneratingAdvice] = useState(false);
+  
+  // Project Chat State
+  const [projectMessages, setProjectMessages] = useState<AgentMessage[]>([]);
+  const [projectInput, setProjectInput] = useState("");
+  const [isProjectChatLoading, setIsProjectChatLoading] = useState(false);
+  const projectChatEndRef = useRef<HTMLDivElement>(null);
   
   // --- Reading State ---
   const [focusedSentenceId, setFocusedSentenceId] = useState<string | null>(null);
@@ -38,10 +41,12 @@ const App: React.FC = () => {
 
   // --- Refs ---
   const sentenceRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const streamingMsgIdRef = useRef<string | null>(null);
 
-  // --- Lexicon Aggregation Engine ---
-  // Transforms the project books into a frequency-mapped vocabulary list, merging with Persisted Stats
+  // Coherent scrolling for project chat
+  useEffect(() => {
+    projectChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [projectMessages]);
+
   const projectLexicon = useMemo(() => {
     const map = new Map<string, LexiconItem>();
     const stats = activeProject.vocabularyStats;
@@ -51,33 +56,17 @@ const App: React.FC = () => {
         sentence.tokens.forEach(token => {
           if (token.text.match(/[a-zA-Z]/) && token.text.length > 1) {
              const key = token.lemma;
-             
-             // Ensure stat entry exists (if not, use token defaults)
-             const stat = stats[key] || { 
-               lemma: key, 
-               familiarity: token.familiarity, 
-               reviewCount: 0, 
-               definition: undefined 
-             };
-
+             const stat = stats[key] || { lemma: key, familiarity: token.familiarity, reviewCount: 0 };
              if (!map.has(key)) {
                map.set(key, {
-                 lemma: key,
-                 count: 0,
-                 familiarity: stat.familiarity, // Use source of truth
-                 reviewCount: stat.reviewCount,
-                 definition: stat.definition,
-                 occurrences: []
+                 lemma: key, count: 0, familiarity: stat.familiarity, reviewCount: stat.reviewCount, definition: stat.definition, occurrences: []
                });
              }
              const item = map.get(key)!;
              item.count++;
-             if (item.occurrences.length < 3) {
+             if (item.occurrences.length < 5) {
                item.occurrences.push({
-                 sentenceText: sentence.text,
-                 bookTitle: book.title,
-                 wordText: token.text,
-                 wordId: token.id
+                 sentenceText: sentence.text, bookTitle: book.title, bookId: book.id, sentenceId: sentence.id, wordText: token.text, wordId: token.id
                });
              }
           }
@@ -87,96 +76,71 @@ const App: React.FC = () => {
     return Array.from(map.values()).sort((a, b) => b.count - a.count);
   }, [activeProject]);
 
+  const handleAssessmentComplete = (level: UserProficiency) => setUserProficiency(level);
 
-  // 1. Proficiency
-  const handleAssessmentComplete = (level: UserProficiency) => {
-    setUserProficiency(level);
-  };
-
-  // 2. Centralized Vocabulary Update Logic
-  // Handles both familiarity updates and persisting definitions/counts
   const handleUpdateLexicon = (lemma: string, updates: Partial<VocabularyStat>) => {
-    
-    // 1. Update Vocabulary Stats (Metadata)
-    const currentStats = activeProject.vocabularyStats[lemma] || { 
-      lemma, 
-      familiarity: Familiarity.Unknown, 
-      reviewCount: 0 
-    };
-    
+    const currentStats = activeProject.vocabularyStats[lemma] || { lemma, familiarity: Familiarity.Unknown, reviewCount: 0 };
     const newStat = { ...currentStats, ...updates };
-    
-    const newStatsMap = { 
-      ...activeProject.vocabularyStats,
-      [lemma]: newStat 
-    };
+    const newStatsMap = { ...activeProject.vocabularyStats, [lemma]: newStat };
 
-    // 2. Sync Books (If familiarity changed, update visual tokens)
-    let newBooks = activeProject.books;
-    if (updates.familiarity !== undefined) {
-      newBooks = activeProject.books.map(book => ({
-        ...book,
-        content: book.content.map(sentence => ({
-          ...sentence,
-          tokens: sentence.tokens.map(t => {
-            if (t.lemma === lemma) {
-              return { ...t, familiarity: updates.familiarity! };
-            }
-            return t;
-          })
-        }))
-      }));
-    }
+    let newBooks = activeProject.books.map(book => ({
+      ...book,
+      content: book.content.map(sentence => ({
+        ...sentence,
+        tokens: sentence.tokens.map(t => t.lemma === lemma ? { ...t, familiarity: updates.familiarity ?? t.familiarity } : t)
+      }))
+    }));
 
-    // 3. Update Project State
-    const newProject = { 
-      ...activeProject, 
-      books: newBooks,
-      vocabularyStats: newStatsMap 
-    };
-    
+    const newProject = { ...activeProject, books: newBooks, vocabularyStats: newStatsMap };
     setActiveProject(newProject);
-
-    // Sync active book
     if (activeBook) {
       const updatedActiveBook = newBooks.find(b => b.id === activeBook.id);
       if (updatedActiveBook) setActiveBook(updatedActiveBook);
     }
   };
 
-  // 3. AI Request
-  const handleAiRequest = async (targetText: string, prompt: string, sentenceIndex: number) => {
-    if (rightPanelState === 'collapsed') {
-        setRightPanelState('default'); 
+  const navigateToContext = (bookId: string, sentenceId: string, wordId: string) => {
+    setLeftPanelState('default');
+    const targetBook = activeProject.books.find(b => b.id === bookId);
+    if (targetBook) {
+      setActiveBook(targetBook);
+      setFocusedSentenceId(null);
     }
-    
+    setTimeout(() => {
+      const element = sentenceRefs.current.get(sentenceId);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.classList.add('bg-secondary/10');
+        setTimeout(() => element.classList.remove('bg-secondary/10'), 2000);
+        setFocusedSentenceId(sentenceId);
+      }
+    }, 100);
+  };
+
+  const handleAiRequest = async (targetText: string, prompt: string, sentenceIndex: number, tokenLemma?: string) => {
+    if (tokenLemma) {
+      const currentStat = activeProject.vocabularyStats[tokenLemma];
+      handleUpdateLexicon(tokenLemma, {
+        familiarity: currentStat?.familiarity === Familiarity.Unknown ? Familiarity.Seen : currentStat?.familiarity,
+        reviewCount: (currentStat?.reviewCount || 0) + 1
+      });
+    }
+    if (rightPanelState === 'collapsed') setRightPanelState('default'); 
     setIsAiLoading(true);
-
     const msgId = Date.now().toString();
-    streamingMsgIdRef.current = msgId;
-
-    const initialMsg: AgentMessage = {
-      id: msgId,
-      role: 'agent',
-      content: '',
-      type: 'annotation'
-    };
+    const initialMsg: AgentMessage = { id: msgId, role: 'agent', content: '', type: 'annotation' };
     setMessages(prev => [initialMsg, ...prev]);
 
-    // Micro Context
     let surroundingContext = "";
     if (activeBook && activeBook.content) {
       const start = Math.max(0, sentenceIndex - 2);
       const end = Math.min(activeBook.content.length, sentenceIndex + 3);
-      surroundingContext = activeBook.content
-        .slice(start, end)
-        .map(s => s.text)
-        .join(" ");
+      surroundingContext = activeBook.content.slice(start, end).map(s => s.text).join(" ");
     }
 
     const contextData: AnnotationContext = {
       targetSentence: targetText,
-      surroundingContext: surroundingContext,
+      surroundingContext,
       bookTitle: activeBook?.title || '',
       author: activeBook?.author || '',
       projectName: activeProject.name,
@@ -185,23 +149,28 @@ const App: React.FC = () => {
     };
 
     await streamAnnotation(contextData, prompt, (updatedText) => {
-      setMessages(currentMsgs => 
-        currentMsgs.map(msg => 
-          msg.id === msgId ? { ...msg, content: updatedText } : msg
-        )
-      );
+      setMessages(currentMsgs => currentMsgs.map(msg => msg.id === msgId ? { ...msg, content: updatedText } : msg));
     });
-
     setIsAiLoading(false);
-    streamingMsgIdRef.current = null;
   };
 
-  const handleProjectAdviceRequest = async () => {
-    setIsGeneratingAdvice(true);
-    await streamProjectAdvice(activeProject, (text) => {
-      setProjectAdvice(text);
+  const handleProjectChatSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!projectInput.trim() || isProjectChatLoading) return;
+
+    const userMsg: AgentMessage = { id: Date.now().toString(), role: 'user', content: projectInput, type: 'chat' };
+    const agentMsgId = (Date.now() + 1).toString();
+    const agentMsg: AgentMessage = { id: agentMsgId, role: 'agent', content: '', type: 'chat' };
+    
+    setProjectMessages(prev => [...prev, userMsg, agentMsg]);
+    setProjectInput("");
+    setIsProjectChatLoading(true);
+
+    await streamProjectChat(activeProject, [...projectMessages, userMsg], (text) => {
+      setProjectMessages(prev => prev.map(m => m.id === agentMsgId ? { ...m, content: text } : m));
     });
-    setIsGeneratingAdvice(false);
+
+    setIsProjectChatLoading(false);
   };
 
   const handleSentenceClick = (sentence: Sentence, index: number) => {
@@ -216,7 +185,7 @@ const App: React.FC = () => {
     if (isZenMode) return;
     setActiveToken(token);
     setFocusedSentenceId(sentence.id); 
-    handleAiRequest(sentence.text, `深度解析单词 "${token.text}" 在此特定语境下的含义。`, index);
+    handleAiRequest(sentence.text, `深度解析单词 "${token.text}" 在此特定语境下的含义。`, index, token.lemma);
   };
 
   const handleBookSelect = (book: Book) => {
@@ -226,199 +195,186 @@ const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  if (!activeBook) return <div className="p-10">Loading...</div>;
-
-  // New "Focus" Icon (Target/Concentric Circles)
   const FocusIcon = (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-      <circle cx="12" cy="12" r="9" />
-      <circle cx="12" cy="12" r="3" />
+      <circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3" />
     </svg>
   );
 
   const AgentIcon = (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-       <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 00-1.423 1.423z" />
+       <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
     </svg>
-  );
-
-  const lexisCount = projectLexicon.length;
-
-  // Header Content for Panels
-  const LeftPanelHeader = (
-    <div className="flex items-center gap-4">
-      <button 
-        onClick={() => setLeftPanelMode('library')} 
-        className={`text-xs font-bold uppercase tracking-[0.2em] transition-colors ${leftPanelMode === 'library' ? 'text-ink' : 'text-gray-400 hover:text-gray-600'}`}
-      >
-        Library
-      </button>
-      <span className="text-gray-300">/</span>
-      <button 
-        onClick={() => setLeftPanelMode('lexis')} 
-        className={`text-xs font-bold uppercase tracking-[0.2em] transition-colors ${leftPanelMode === 'lexis' ? 'text-ink' : 'text-gray-400 hover:text-gray-600'}`}
-      >
-        Lexis
-      </button>
-    </div>
-  );
-
-  const RightPanelHeader = (
-    <div className="flex items-baseline gap-3">
-      <span className="font-bold text-xs uppercase tracking-[0.2em] text-ink">Margin Notes</span>
-      <span className="text-[10px] text-gray-400 uppercase tracking-wider hidden md:inline-block">
-        {userProficiency === UserProficiency.Advanced ? 'Deep Read' : 'Analysis'}
-      </span>
-    </div>
   );
 
   return (
     <div className="h-screen bg-paper text-ink font-sans flex flex-col md:flex-row overflow-hidden relative">
-      
-      <ProficiencyModal 
-        isOpen={userProficiency === null} 
-        onComplete={handleAssessmentComplete} 
-      />
+      <ProficiencyModal isOpen={userProficiency === null} onComplete={handleAssessmentComplete} />
 
-      {/* --- ZEN MODE FLOATING BAR --- */}
       {isZenMode && (
         <div className="fixed top-6 right-8 z-[60] flex items-center gap-3 animate-fade-in">
-          <div className={`
-             flex items-center p-1.5 rounded-full 
-             bg-white/10 backdrop-blur-md border border-white/10 shadow-sm
-             transition-all duration-500 ease-out hover:bg-white/40
-          `}>
-             <button
-               onClick={() => setLeftPanelState('default')}
-               className="w-10 h-10 flex items-center justify-center rounded-full text-ink/80 hover:text-ink hover:bg-white/40 transition-all"
-               title="Focus Module"
-             >
-                {FocusIcon}
-             </button>
+          <div className="flex items-center p-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/10 shadow-sm hover:bg-white/40">
+             <button onClick={() => setLeftPanelState('default')} className="w-10 h-10 flex items-center justify-center rounded-full text-ink/80 hover:text-ink transition-all">{FocusIcon}</button>
              <div className="w-px h-4 bg-black/10 mx-1"></div>
-             <button
-               onClick={() => setRightPanelState('default')}
-               className="w-10 h-10 flex items-center justify-center rounded-full text-ink/80 hover:text-ink hover:bg-white/40 transition-all"
-               title="Agent Module"
-             >
-               {AgentIcon}
-             </button>
+             <button onClick={() => setRightPanelState('default')} className="w-10 h-10 flex items-center justify-center rounded-full text-ink/80 hover:text-ink transition-all">{AgentIcon}</button>
           </div>
         </div>
       )}
 
-
-      {/* LEFT COLUMN: Focus Module (Project & Lexis) */}
+      {/* FOCUS MODULE (Fullscreen/Left) */}
       <LayoutShell
-        side="left"
-        state={leftPanelState}
-        onStateChange={setLeftPanelState}
-        title="Focus Module"
-        headerContent={LeftPanelHeader}
-        collapsedPeerTrigger={rightPanelState === 'collapsed' && !isZenMode ? {
-          label: "Open Agent",
-          icon: AgentIcon,
-          onClick: () => setRightPanelState('default')
-        } : null}
+        side="left" state={leftPanelState} onStateChange={setLeftPanelState} title="Focus"
+        headerContent={<div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">Project Engine</div>}
+        collapsedPeerTrigger={rightPanelState === 'collapsed' && !isZenMode ? { label: "Open Agent", icon: AgentIcon, onClick: () => setRightPanelState('default') } : null}
         expandedContent={
-          <div className="animate-fade-in-up h-full flex flex-col">
-            <h1 className="text-4xl md:text-5xl font-serif font-bold text-ink mb-8 flex-shrink-0">{activeProject.name}</h1>
-            
-            {/* Split Grid for Expanded View */}
-            <div className="grid md:grid-cols-12 gap-12 flex-1 min-h-0">
-               {/* Left Col: Project Info (4 cols) */}
-               <div className="md:col-span-4 flex flex-col overflow-y-auto no-scrollbar pr-4">
-                 <p className="text-xl text-gray-500 leading-relaxed mb-12">
-                   {activeProject.description}
-                 </p>
-                 <ProjectContext 
-                    project={activeProject}
-                    activeBookId={activeBook.id}
-                    onBookSelect={(b) => { handleBookSelect(b); setLeftPanelState('default'); }}
-                    adviceContent={projectAdvice}
-                    onGenerateAdvice={handleProjectAdviceRequest}
-                    isGeneratingAdvice={isGeneratingAdvice}
-                 />
-               </div>
+          <div className="animate-fade-in h-full flex flex-col pt-2 max-h-screen overflow-hidden">
+            {/* FOCUS HEADER */}
+            <div className="flex justify-between items-baseline mb-6 flex-shrink-0">
+               <nav 
+                 className="flex items-center gap-4 h-12"
+                 onMouseEnter={() => setIsSwitcherExpanded(true)}
+                 onMouseLeave={() => setIsSwitcherExpanded(false)}
+               >
+                  <span className="text-4xl font-display font-medium text-ink/10 select-none">Focus</span>
+                  <span className="text-3xl font-display text-gray-200 select-none">|</span>
+                  
+                  <div className="flex items-center">
+                    <button className={`text-4xl font-display capitalize transition-all duration-500 ${isSwitcherExpanded ? 'text-ink/20 scale-95' : 'text-ink scale-100'}`}>
+                      {focusView}
+                    </button>
 
-               {/* Right Col: Lexis Data Matrix (8 cols) */}
-               <div className="md:col-span-8 bg-white rounded-lg shadow-sm border border-gray-100 flex flex-col overflow-hidden h-full">
-                  {/* Reuse LexisDeck in expanded mode */}
-                  <div className="flex-1 overflow-hidden p-6">
-                    <LexisDeck 
-                      lexicon={projectLexicon}
-                      onUpdateLexicon={handleUpdateLexicon}
-                      onGenerateDefinition={generateWordDefinition}
-                      isExpanded={true}
-                    />
+                    <div className={`flex items-center gap-8 transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] ${isSwitcherExpanded ? 'opacity-100 translate-x-8 max-w-[400px]' : 'opacity-0 -translate-x-4 max-w-0 pointer-events-none'}`}>
+                       {['project', 'lexis'].map(mode => mode !== focusView && (
+                         <button key={mode} onClick={() => { setFocusView(mode as any); setIsSwitcherExpanded(false); }} className="text-4xl font-display text-accent hover:text-ink transition-all whitespace-nowrap">
+                           {mode === 'project' ? 'Project' : 'Lexis'}
+                         </button>
+                       ))}
+                    </div>
                   </div>
-               </div>
+               </nav>
+
+               <button 
+                 onClick={() => setLeftPanelState('default')}
+                 className="p-2 text-gray-300 hover:text-ink transition-all rounded-full hover:bg-black/5"
+                 title="Exit Focus"
+               >
+                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor" className="w-10 h-10 hover:rotate-90 transition-transform">
+                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                 </svg>
+               </button>
+            </div>
+            
+            <div className="flex-1 min-h-0">
+               {focusView === 'project' ? (
+                  <div className="grid md:grid-cols-12 gap-12 h-full">
+                    {/* LEFT COLUMN: Bibliography (Narrower for Navigation) */}
+                    <div className="md:col-span-4 lg:col-span-3 flex flex-col h-full overflow-hidden border-r border-black/5 pr-10">
+                      <div className="flex justify-between items-baseline mb-8">
+                        <h3 className="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-900">Bibliography</h3>
+                        <span className="text-[10px] text-gray-300 uppercase font-mono">{activeProject.books.length} Items</span>
+                      </div>
+                      <div className="flex-1 overflow-y-auto no-scrollbar space-y-4 pb-10">
+                        {activeProject.books.map(book => (
+                          <div 
+                            key={book.id} 
+                            onClick={() => { handleBookSelect(book); setLeftPanelState('default'); }}
+                            className={`group/book relative p-6 transition-all cursor-pointer border-l-2 ${book.id === activeBook?.id ? 'border-accent bg-white shadow-soft ring-1 ring-black/5' : 'border-transparent hover:border-gray-200 hover:bg-white/40'}`}
+                          >
+                            <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-2">{book.author}</div>
+                            <h4 className="text-lg font-serif text-ink leading-tight mb-4">{book.title}</h4>
+                            <div className="h-0.5 bg-gray-100 w-full rounded-full overflow-hidden">
+                               <div className="h-full bg-ink/30 transition-all duration-1000" style={{ width: `${book.progress}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* RIGHT COLUMN: Project Chat (Wider for Discussion) */}
+                    <div className="md:col-span-8 lg:col-span-9 flex flex-col h-full overflow-hidden">
+                      <div className="mb-6 flex-shrink-0">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-300 mb-1">Project Synthesis Canvas</div>
+                        <h4 className="text-2xl font-serif text-ink italic leading-tight">Dialogue across reading vectors.</h4>
+                      </div>
+
+                      {/* Chat Messages - Now with sticky scroll bottom */}
+                      <div className="flex-1 overflow-y-auto no-scrollbar space-y-10 pb-8 pr-6">
+                         {projectMessages.length === 0 ? (
+                           <div className="pt-20 flex flex-col items-center justify-center text-center opacity-20">
+                              <span className="text-7xl font-display italic text-gray-300 mb-6">M</span>
+                              <p className="text-xl font-serif italic text-gray-400 max-w-xl leading-relaxed">
+                                "The production of space in visual culture... What links Benjamin's aura to the museum-factory?"
+                              </p>
+                           </div>
+                         ) : (
+                           projectMessages.map(m => (
+                             <div key={m.id} className="animate-fade-in-up max-w-4xl mx-auto w-full">
+                                <div className="flex items-start gap-8">
+                                   <div className={`flex-shrink-0 w-16 text-[9px] uppercase tracking-[0.3em] font-bold pt-2 ${m.role === 'agent' ? 'text-accent' : 'text-gray-400'}`}>
+                                      {m.role === 'agent' ? 'Agent' : 'User'}
+                                   </div>
+                                   <div className={`flex-1 prose prose-slate max-w-none font-serif leading-[1.8] ${m.role === 'agent' ? 'text-gray-800 text-lg' : 'text-gray-500 italic bg-white/50 p-6 rounded-lg border border-black/5 shadow-soft'}`}>
+                                      <ReactMarkdown>{m.content || "..."}</ReactMarkdown>
+                                   </div>
+                                </div>
+                             </div>
+                           ))
+                         )}
+                         <div ref={projectChatEndRef} />
+                      </div>
+
+                      {/* FIXED Input Positioning at the bottom of the container */}
+                      <div className="mt-auto pt-6 border-t border-black/5 flex-shrink-0 bg-paper">
+                         <form onSubmit={handleProjectChatSubmit} className="relative max-w-5xl mx-auto w-full mb-6">
+                            <input 
+                              type="text" 
+                              value={projectInput}
+                              onChange={(e) => setProjectInput(e.target.value)}
+                              placeholder="Discuss the overarching dialectic..."
+                              className="w-full bg-white border border-black/5 shadow-float rounded-xl py-6 pl-8 pr-16 text-xl focus:ring-1 focus:ring-accent transition-all font-serif placeholder:italic placeholder:opacity-40"
+                            />
+                            <button type="submit" disabled={isProjectChatLoading} className="absolute right-4 top-1/2 -translate-y-1/2 p-3 text-accent hover:text-ink transition-all disabled:opacity-30">
+                               {isProjectChatLoading ? (
+                                 <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                               ) : (
+                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-7 h-7"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+                               )}
+                            </button>
+                         </form>
+                      </div>
+                    </div>
+                  </div>
+               ) : (
+                  <div className="h-full flex flex-col animate-fade-in no-scrollbar overflow-hidden">
+                    <LexisDeck lexicon={projectLexicon} onUpdateLexicon={handleUpdateLexicon} onGenerateDefinition={generateWordDefinition} onNavigateToContext={navigateToContext} isExpanded={true} bookCount={activeProject.books.length} />
+                  </div>
+               )}
             </div>
           </div>
         }
       >
         <div className="flex flex-col h-full pt-4">
-           {leftPanelMode === 'library' ? (
-              <ProjectContext 
-                project={activeProject} 
-                activeBookId={activeBook.id}
-                onBookSelect={handleBookSelect}
-                adviceContent={undefined}
-                onGenerateAdvice={() => {}}
-                isGeneratingAdvice={false}
-              />
-           ) : (
-              <LexisDeck 
-                lexicon={projectLexicon}
-                onUpdateLexicon={handleUpdateLexicon}
-                onGenerateDefinition={generateWordDefinition}
-                isExpanded={false}
-              />
-           )}
+           <ProjectContext project={activeProject} activeBookId={activeBook?.id} onBookSelect={handleBookSelect} />
         </div>
       </LayoutShell>
 
-      {/* CENTER COLUMN: Reading Stage */}
-      <main 
-        className={`
-          h-full overflow-y-auto scroll-smooth no-scrollbar bg-paper transition-all duration-700 ease-in-out flex-1 relative
-          ${leftPanelState === 'expanded' || rightPanelState === 'expanded' ? 'opacity-0 overflow-hidden pointer-events-none' : 'opacity-100'}
-        `}
-      >
-        <div className={`
-           mx-auto px-8 md:px-16 lg:px-24 py-16 md:py-24 transition-all duration-700 ease-out
-           ${isZenMode ? 'max-w-4xl' : 'max-w-3xl'} 
-        `}>
-          <div className="space-y-10">
+      {/* READING STAGE */}
+      <main className={`h-full overflow-y-auto scroll-smooth no-scrollbar transition-all duration-700 flex-1 relative ${leftPanelState === 'expanded' || rightPanelState === 'expanded' ? 'opacity-0 overflow-hidden pointer-events-none' : 'opacity-100'}`}>
+        <div className={`mx-auto px-8 md:px-16 lg:px-24 py-16 md:py-24 ${isZenMode ? 'max-w-4xl' : 'max-w-3xl'}`}>
+          <div className="space-y-12">
             {activeBook.content.map((sentence, index) => {
               const isFocused = focusedSentenceId === sentence.id;
-              
               return (
                 <div 
-                  key={sentence.id}
-                  ref={(el) => {
-                    if (el) sentenceRefs.current.set(sentence.id, el);
-                    else sentenceRefs.current.delete(sentence.id);
-                  }}
-                  onClick={() => handleSentenceClick(sentence, index)}
-                  className={`
-                    transition-all duration-500 ease-out
-                    ${isZenMode ? '' : 'cursor-pointer'}
-                    ${!isZenMode && isFocused ? 'transform translate-x-0' : ''} 
-                    ${!isZenMode && !isFocused && focusedSentenceId !== null ? '' : ''}
-                  `}
+                  key={sentence.id} 
+                  ref={(el) => { if (el) sentenceRefs.current.set(sentence.id, el); else sentenceRefs.current.delete(sentence.id); }} 
+                  onClick={() => handleSentenceClick(sentence, index)} 
+                  className={`transition-all duration-500 ease-out ${isZenMode ? '' : 'cursor-pointer'} ${!isZenMode && isFocused ? 'transform translate-x-2 border-l border-accent/30 pl-6' : 'opacity-80 hover:opacity-100'}`}
                 >
                   <p className="text-lg md:text-xl lg:text-2xl leading-[2.2] font-serif text-left tracking-wide text-ink/90">
                     {sentence.tokens.map((token, idx) => (
                       <React.Fragment key={token.id}>
-                        <ReaderToken
-                          token={token}
-                          isActive={activeToken?.id === token.id}
-                          isSentenceFocused={isFocused}
-                          onClick={(t) => handleTokenClick(t, sentence, index)}
-                          isZenMode={isZenMode}
-                        />
-                        {/* Punctuation spacing logic */}
+                        <ReaderToken token={token} isActive={activeToken?.id === token.id} isSentenceFocused={isFocused} onClick={(t) => handleTokenClick(t, sentence, index)} isZenMode={isZenMode} />
                         {idx < sentence.tokens.length - 1 && <span className="select-none"> </span>}
                       </React.Fragment>
                     ))}
@@ -431,44 +387,14 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* RIGHT COLUMN: Margin Agent */}
+      {/* MARGIN AGENT (Right Sidebar) */}
       <LayoutShell
-        side="right"
-        state={rightPanelState}
-        onStateChange={setRightPanelState}
-        title="Agent"
-        headerContent={RightPanelHeader}
-        collapsedPeerTrigger={leftPanelState === 'collapsed' && !isZenMode ? {
-          label: "Open Focus",
-          icon: FocusIcon,
-          onClick: () => setLeftPanelState('default')
-        } : null}
-        expandedContent={
-          <div className="max-w-4xl mx-auto py-12">
-            <h1 className="text-4xl font-serif font-bold text-ink mb-8">Deep Dive Conversation</h1>
-            <div className="grid grid-cols-1 gap-8">
-               <MarginSidebar 
-                 messages={messages} 
-                 isLoading={isAiLoading} 
-                 proficiency={userProficiency || UserProficiency.Intermediate}
-               />
-               <div className="mt-8 pt-8 border-t border-gray-100">
-                  <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-4">Extended Context</h3>
-                  <p className="text-gray-500">
-                     (Visualizations of concept maps and historical timelines would appear here.)
-                  </p>
-               </div>
-            </div>
-          </div>
-        }
+        side="right" state={rightPanelState} onStateChange={setRightPanelState} title="Agent"
+        headerContent={<div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">Margin Notes</div>}
+        collapsedPeerTrigger={leftPanelState === 'collapsed' && !isZenMode ? { label: "Open Focus", icon: AgentIcon, onClick: () => setLeftPanelState('default') } : null}
       >
-        <MarginSidebar 
-          messages={messages} 
-          isLoading={isAiLoading} 
-          proficiency={userProficiency || UserProficiency.Intermediate}
-        />
+        <MarginSidebar messages={messages} isLoading={isAiLoading} proficiency={userProficiency || UserProficiency.Intermediate} />
       </LayoutShell>
-
     </div>
   );
 };

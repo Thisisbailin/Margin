@@ -86,6 +86,7 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
   if (state === 'expanded') {
     return (
       <aside className="fixed inset-0 z-50 bg-paper animate-fade-in flex flex-col overflow-hidden">
+        {/* Expanded content now owns its own header for better focus */}
         <div className="flex-1 overflow-y-auto p-6 md:p-16 lg:p-24 no-scrollbar">
            <div className="max-w-[1400px] mx-auto h-full flex flex-col">
               {expandedContent || children}

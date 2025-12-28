@@ -19,13 +19,13 @@
               display: ['Playfair Display', 'serif'],
             },
             colors: {
-              ink: '#262626', // Softer black
-              paper: '#FDFBF7', // Warm off-white (Cream)
-              surface: '#F5F2EB', // Slightly darker warm gray for sidebars
+              ink: '#262626',
+              paper: '#FDFBF7',
+              surface: '#F5F2EB',
               mist: '#E5E5E5',
               faded: '#A3A3A3',
-              accent: '#C28E5B', // Muted Gold/Sepia (Primary Accent)
-              secondary: '#A8C9A8', // Soft Sage Green (Selection/Highlight)
+              accent: '#C28E5B',
+              secondary: '#A8C9A8',
               'accent-hover': '#A67C52'
             },
             boxShadow: {
@@ -58,7 +58,6 @@
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
       }
-      /* Hide scrollbar for cleaner look */
       .no-scrollbar::-webkit-scrollbar {
         display: none;
       }
@@ -66,14 +65,13 @@
         -ms-overflow-style: none;
         scrollbar-width: none;
       }
-      /* Custom Typography override for Markdown */
       .prose p {
         margin-top: 0.5em;
         margin-bottom: 0.5em;
         line-height: 1.6;
       }
       .prose strong {
-        color: #C28E5B; /* Accent color for bold text */
+        color: #C28E5B;
         font-weight: 600;
       }
       .prose ul {
@@ -100,5 +98,7 @@
 </head>
   <body>
     <div id="root"></div>
+    <!-- CRITICAL: Entry point for the application -->
+    <script type="module" src="index.tsx"></script>
   </body>
 </html>

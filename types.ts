@@ -88,11 +88,13 @@ export interface LexiconItem {
   lemma: string;
   count: number; // Frequency in the entire project
   familiarity: Familiarity;
-  reviewCount: number; // NEW
-  definition?: string; // NEW
+  reviewCount: number; 
+  definition?: string; 
   occurrences: {
     sentenceText: string;
     bookTitle: string;
+    bookId: string;      // NEW: For navigation
+    sentenceId: string;  // NEW: For navigation
     wordText: string;
     wordId: string;
   }[];
@@ -102,5 +104,5 @@ export type FrequencyBand = 'core' | 'essential' | 'niche';
 
 export interface StudyFilter {
   band: FrequencyBand | 'all';
-  status: 'new' | 'review' | 'mastered' | 'all'; // Changed 'learning' to 'review' for clarity
+  status: 'new' | 'review' | 'mastered' | 'all'; 
 }
