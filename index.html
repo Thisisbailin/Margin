@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -57,6 +58,7 @@
         color: #262626;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+        font-size: 0.95rem; /* Slightly smaller base font */
       }
       .no-scrollbar::-webkit-scrollbar {
         display: none;
@@ -66,8 +68,8 @@
         scrollbar-width: none;
       }
       .prose p {
-        margin-top: 0.5em;
-        margin-bottom: 0.5em;
+        margin-top: 0.4em;
+        margin-bottom: 0.4em;
         line-height: 1.6;
       }
       .prose strong {
@@ -75,13 +77,13 @@
         font-weight: 600;
       }
       .prose ul {
-        margin-top: 0.5em;
-        margin-bottom: 0.5em;
+        margin-top: 0.4em;
+        margin-bottom: 0.4em;
         padding-left: 1.2em;
       }
       .prose li {
-        margin-top: 0.25em;
-        margin-bottom: 0.25em;
+        margin-top: 0.2em;
+        margin-bottom: 0.2em;
       }
     </style>
   <script type="importmap">
@@ -98,7 +100,6 @@
 </head>
   <body>
     <div id="root"></div>
-    <!-- CRITICAL: Entry point for the application -->
     <script type="module" src="index.tsx"></script>
   </body>
 </html>

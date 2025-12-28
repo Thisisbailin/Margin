@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Book, Project } from '../types';
 
@@ -14,20 +15,20 @@ const ProjectContext: React.FC<ProjectContextProps> = ({
 }) => {
   return (
     <div className="flex flex-col font-sans h-full">
-      <div className="mb-8">
-         <h2 className="text-lg font-display text-ink leading-tight mb-2 tracking-tight">
+      <div className="mb-6">
+         <h2 className="text-base font-display text-ink leading-tight mb-2 tracking-tight">
           {project.name}
          </h2>
-         <div className="w-6 h-px bg-accent" />
+         <div className="w-5 h-px bg-accent" />
       </div>
 
-      <div className="flex-1 space-y-3">
+      <div className="flex-1 space-y-2">
         {project.books.map((book) => (
           <div 
             key={book.id}
             onClick={() => onBookSelect(book)}
             className={`
-              group cursor-pointer rounded-lg p-4 transition-all duration-300 relative
+              group cursor-pointer rounded p-3.5 transition-all duration-300 relative
               ${book.id === activeBookId 
                 ? 'bg-white shadow-soft ring-1 ring-black/5' 
                 : 'hover:bg-black/5 text-gray-500'}
@@ -35,15 +36,15 @@ const ProjectContext: React.FC<ProjectContextProps> = ({
           >
             <div className="flex justify-between items-start">
               <div className="flex-1 pr-4">
-                <h3 className={`font-serif text-sm transition-colors ${book.id === activeBookId ? 'text-ink font-medium' : 'group-hover:text-ink'}`}>
+                <h3 className={`font-serif text-[13px] transition-colors ${book.id === activeBookId ? 'text-ink font-medium' : 'group-hover:text-ink'}`}>
                   {book.title}
                 </h3>
-                <p className="text-[10px] uppercase tracking-widest text-gray-400 mt-1.5">
+                <p className="text-[9px] uppercase tracking-widest text-gray-400 mt-1.5">
                   {book.author}
                 </p>
               </div>
               {book.id === activeBookId && (
-                 <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5 shadow-[0_0_8px_rgba(194,142,91,0.6)]" />
+                 <div className="w-1 h-1 rounded-full bg-accent mt-1.5 shadow-[0_0_8px_rgba(194,142,91,0.6)]" />
               )}
             </div>
           </div>
