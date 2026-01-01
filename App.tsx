@@ -7,6 +7,7 @@ import MarginSidebar from './components/MarginSidebar';
 import ProjectContext from './components/ProjectContext';
 import LayoutShell from './components/LayoutShell';
 import ProficiencyModal from './components/ProficiencyModal';
+import SettingsModal from './components/SettingsModal';
 import LexisDeck from './components/LexisDeck';
 import { streamAnnotation, generateWordDefinition, streamProjectChat } from './services/geminiService';
 import ReactMarkdown from 'react-markdown';
@@ -15,7 +16,11 @@ const App: React.FC = () => {
   const [leftPanelState, setLeftPanelState] = useState<PanelState>('default');
   const [rightPanelState, setRightPanelState] = useState<PanelState>('default');
   const [focusView, setFocusView] = useState<'project' | 'lexis'>('project');
-  const [userProficiency, setUserProficiency] = useState<UserProficiency | null>(null);
+  const [userProficiency, setUserProficiency] = useState<UserProficiency | null>(() => {
+    const saved = localStorage.getItem('margin_proficiency');
+    return saved ? (saved as UserProficiency) : null;
+  });
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isZenMode, setIsZenMode] = useState(false);
 
   const [activeProject, setActiveProject] = useState<Project>(MOCK_PROJECT);
@@ -30,6 +35,13 @@ const App: React.FC = () => {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [focusedSentenceId, setFocusedSentenceId] = useState<string | null>(null);
   const [activeToken, setActiveToken] = useState<WordOccurrence | null>(null);
+
+  // Persistence for proficiency
+  useEffect(() => {
+    if (userProficiency) {
+      localStorage.setItem('margin_proficiency', userProficiency);
+    }
+  }, [userProficiency]);
 
   // --- 词汇数据分析逻辑 ---
   const terrainAnalysis = useMemo(() => {
@@ -101,11 +113,10 @@ const App: React.FC = () => {
     });
   };
 
-  // --- 修复交互：点击句子，清除词汇激活 ---
   const handleSentenceClick = async (sentence: Sentence) => {
     if (isZenMode) return;
     setFocusedSentenceId(sentence.id);
-    setActiveToken(null); // 重要：点击句子层级时，清除词汇层级的激活
+    setActiveToken(null); 
     
     sentence.tokens.forEach(t => recordInteraction(t.lemma, 'implicit', 0.05, t.id));
 
@@ -133,11 +144,10 @@ const App: React.FC = () => {
     setIsAiLoading(false);
   };
 
-  // --- 修复交互：点击词汇，同步更新句子聚焦指针 ---
   const handleTokenClick = async (token: WordOccurrence, sentenceId: string) => {
     if (isZenMode) return;
     setActiveToken(token);
-    setFocusedSentenceId(sentenceId); // 重要：确保阅读指针（句子高亮）同步到词汇所在句
+    setFocusedSentenceId(sentenceId); 
     
     recordInteraction(token.lemma, 'explicit', -0.1, token.id);
 
@@ -203,10 +213,20 @@ const App: React.FC = () => {
   return (
     <div className="h-screen bg-paper text-ink font-sans flex flex-col md:flex-row overflow-hidden relative">
       <ProficiencyModal isOpen={userProficiency === null} onComplete={setUserProficiency} />
+      <SettingsModal 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)} 
+        proficiency={userProficiency || UserProficiency.Intermediate}
+        onProficiencyChange={setUserProficiency}
+      />
 
       <LayoutShell
         side="left" state={leftPanelState} onStateChange={setLeftPanelState} title="Focus"
-        headerContent={<div className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">Cognitive Hub</div>}
+        headerContent={
+          <div className="flex items-center gap-4">
+            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">Cognitive Hub</div>
+          </div>
+        }
         expandedContent={
           <div className="h-full flex flex-col overflow-hidden pb-16">
              <div className="flex justify-between items-center mb-10">
@@ -214,9 +234,14 @@ const App: React.FC = () => {
                    <button onClick={() => setFocusView('project')} className={`text-4xl font-display transition-all ${focusView === 'project' ? 'text-ink' : 'text-ink/10 hover:text-ink/30'}`}>Project</button>
                    <button onClick={() => setFocusView('lexis')} className={`text-4xl font-display transition-all ${focusView === 'lexis' ? 'text-ink' : 'text-ink/10 hover:text-ink/30'}`}>Terrain</button>
                 </nav>
-                <button onClick={() => setLeftPanelState('default')} className="p-3 hover:bg-black/5 rounded-full transition-colors" title="Close Focus">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-ink/30 hover:text-ink"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
+                <div className="flex items-center gap-4">
+                  <button onClick={() => setIsSettingsOpen(true)} className="p-3 hover:bg-black/5 rounded-full transition-colors group" title="Settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-ink/30 group-hover:text-accent transition-colors"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                  </button>
+                  <button onClick={() => setLeftPanelState('default')} className="p-3 hover:bg-black/5 rounded-full transition-colors" title="Close Focus">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-ink/30 hover:text-ink"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
              </div>
              
              {focusView === 'project' ? (
@@ -281,8 +306,17 @@ const App: React.FC = () => {
           </div>
         }
       >
-        <div className="p-6 space-y-8 h-full pb-20">
+        <div className="p-6 space-y-8 h-full pb-20 flex flex-col">
            <ProjectContext project={activeProject} activeBookId={activeBook?.id} onBookSelect={setActiveBook} />
+           <div className="mt-auto pt-6 border-t border-black/5">
+              <button 
+                onClick={() => setIsSettingsOpen(true)}
+                className="w-full py-3 flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-accent transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.094c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 011.45.12l.773.774a1.125 1.125 0 01.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738a1.125 1.125 0 01-.12 1.45l-.774.773a1.125 1.125 0 01-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.02-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527a1.125 1.125 0 01-1.45-.12l-.773-.774a1.125 1.125 0 01-.12-1.45l.527-.737c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.108-1.204l-.526-.738a1.125 1.125 0 01.12-1.45l.774-.773a1.125 1.125 0 011.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                Preferences
+              </button>
+           </div>
         </div>
       </LayoutShell>
 
