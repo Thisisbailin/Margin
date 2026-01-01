@@ -1,4 +1,11 @@
-// Domain Types for Margin
+
+// Domain Types for Margin - Linguistic Landscape Edition
+
+export enum UserProficiency {
+  Beginner = 'beginner',
+  Intermediate = 'intermediate',
+  Advanced = 'advanced'
+}
 
 export enum Familiarity {
   Unknown = 0,
@@ -7,21 +14,54 @@ export enum Familiarity {
   Mastered = 3
 }
 
-export enum UserProficiency {
-  Beginner = 'beginner',       // 初学者
-  Intermediate = 'intermediate', // 进阶者
-  Advanced = 'advanced'        // 精通者
+export type PanelState = 'collapsed' | 'default' | 'expanded';
+export type TopographyView = 'content' | 'memory' | 'reality';
+
+/**
+ * 记忆交互记录：区分隐性与显性
+ */
+export interface MemoryInteraction {
+  timestamp: number;
+  occurrenceId: string;
+  type: 'implicit' | 'explicit'; 
+  weight: number; 
 }
 
-export type PanelState = 'collapsed' | 'default' | 'expanded';
+/**
+ * 词汇统计：IMS + VMS 双驱动
+ */
+export interface VocabularyStat {
+  lemma: string;
+  totalOccurrences: number; 
+  relativeDifficulty: number; 
+  firstDiscoveryProgress: number; // 0.0 - 1.0 单词在书中首次出现的进度位置
+
+  // 记忆分解
+  masteryScore: number;    
+  implicitScore: number;   
+  explicitScore: number;   
+  
+  familiarity: Familiarity; 
+  reviewCount: number;     
+  interactions: MemoryInteraction[];
+  
+  definition?: string;
+  lastEncounterDate: number;
+}
+
+export interface LandscapeStats {
+  uniqueTokens: number;
+  totalTokens: number;
+  ttr: number; 
+  difficultyScore: number; // 综合难度评价
+}
 
 export interface WordOccurrence {
-  id: string;
-  text: string;
-  lemma: string; // The root form
-  pos: string; // Part of Speech
-  familiarity: Familiarity;
-  translation?: string;
+  id: string;      
+  text: string;    
+  lemma: string;   
+  pos: string;     
+  masteryScore: number; 
 }
 
 export interface Sentence {
@@ -30,31 +70,35 @@ export interface Sentence {
   tokens: WordOccurrence[];
 }
 
-// Stats for a specific word lemma across the project
-export interface VocabularyStat {
-  lemma: string;
-  familiarity: Familiarity;
-  reviewCount: number; // How many times reviewed
-  definition?: string; // AI generated definition (persisted)
-  lastReviewDate?: number;
+export interface Paragraph {
+  id: string;
+  type: 'prose' | 'poetry' | 'dialogue'; 
+  sentences: Sentence[];
+}
+
+export interface Chapter {
+  id: string;
+  number: number;
+  title: string;
+  subtitle?: string;
+  content: Paragraph[];
 }
 
 export interface Book {
   id: string;
   title: string;
   author: string;
-  coverImage?: string;
-  content: Sentence[]; // Pre-parsed content
-  progress: number;
+  language: string;
+  chapters: Chapter[]; 
+  progress: number; // 当前真实阅读进度
+  landscape?: LandscapeStats; 
 }
 
 export interface Project {
   id: string;
   name: string;
   description: string;
-  books: Book[]; // Max 9
-  activeBookId?: string;
-  // Source of truth for word mastery and definitions
+  books: Book[];
   vocabularyStats: Record<string, VocabularyStat>; 
 }
 
@@ -62,47 +106,29 @@ export interface AgentMessage {
   id: string;
   role: 'user' | 'agent' | 'system';
   content: string;
-  relatedSentenceId?: string; // Anchor to text
   type: 'annotation' | 'chat' | 'advice';
+}
+
+export interface AnnotationContext {
+  targetSentence: string;
+  surroundingContext: string;
+  bookTitle: string;
+  author: string;
+  language: string;
+  projectName: string;
+  projectDescription: string;
+  proficiency: UserProficiency;
+  targetMastery: number; 
+  isFocusedLookup: boolean; 
+}
+
+export interface LexiconItem extends VocabularyStat {
+  count: number; 
+  occurrences: any[];
 }
 
 export interface AssessmentWord {
   word: string;
   difficulty: 'easy' | 'medium' | 'hard';
   context: string;
-}
-
-// NEW: Structured Context for the Agent
-export interface AnnotationContext {
-  targetSentence: string;
-  surroundingContext: string; // Previous 2 sentences + Next 2 sentences
-  bookTitle: string;
-  author: string;
-  projectName: string;
-  projectDescription: string;
-  proficiency: UserProficiency;
-}
-
-// NEW: Lexicon Engine Types
-export interface LexiconItem {
-  lemma: string;
-  count: number; // Frequency in the entire project
-  familiarity: Familiarity;
-  reviewCount: number; 
-  definition?: string; 
-  occurrences: {
-    sentenceText: string;
-    bookTitle: string;
-    bookId: string;      // NEW: For navigation
-    sentenceId: string;  // NEW: For navigation
-    wordText: string;
-    wordId: string;
-  }[];
-}
-
-export type FrequencyBand = 'core' | 'essential' | 'niche';
-
-export interface StudyFilter {
-  band: FrequencyBand | 'all';
-  status: 'new' | 'review' | 'mastered' | 'all'; 
 }

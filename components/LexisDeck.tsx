@@ -1,353 +1,296 @@
+
 import React, { useState, useMemo } from 'react';
-import ReactMarkdown from 'react-markdown';
-import { LexiconItem, Familiarity, StudyFilter, FrequencyBand, VocabularyStat } from '../types';
-import SkeletonLoader from './SkeletonLoader';
+import { LexiconItem, VocabularyStat, TopographyView } from '../types';
 
 interface LexisDeckProps {
-  lexicon: LexiconItem[]; // Aggregated project vocabulary
+  lexicon: LexiconItem[];
+  bookProgress: number; 
   onUpdateLexicon: (lemma: string, updates: Partial<VocabularyStat>) => void;
   onGenerateDefinition: (word: string) => Promise<string>;
   onNavigateToContext: (bookId: string, sentenceId: string, wordId: string) => void;
   isExpanded?: boolean; 
-  bookCount?: number;
 }
-
-type Mode = 'dashboard' | 'study';
 
 const LexisDeck: React.FC<LexisDeckProps> = ({ 
   lexicon, 
+  bookProgress,
   onUpdateLexicon, 
   onGenerateDefinition,
-  onNavigateToContext,
-  isExpanded = false,
-  bookCount = 0
+  isExpanded = false
 }) => {
-  const [mode, setMode] = useState<Mode>('dashboard');
-  const [studyFilter, setStudyFilter] = useState<StudyFilter>({ band: 'core', status: 'new' });
-  
-  // Flashcard State
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isFlipped, setIsFlipped] = useState(false);
+  const [view, setView] = useState<TopographyView>('reality');
+  const [simulatedProgress, setSimulatedProgress] = useState(bookProgress);
+  const [selectedZone, setSelectedZone] = useState<string | null>(null);
+  const [mode, setMode] = useState<'browse' | 'study'>('browse');
   const [sessionQueue, setSessionQueue] = useState<LexiconItem[]>([]);
-  const [isDefLoading, setIsDefLoading] = useState(false);
-  const [tempDefinition, setTempDefinition] = useState<string | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
-  // --- 1. Compute Stats ---
-  const stats = useMemo(() => {
+  // --- 核心地形逻辑 ---
+  const landscapeData = useMemo(() => {
     const total = lexicon.length;
-    if (total === 0) return { core: 0, essential: 0, niche: 0, known: 0, total: 0, processed: [] };
+    // 按首次发现进度排序，用于内容曲线
+    const sortedByDiscovery = [...lexicon].sort((a, b) => a.firstDiscoveryProgress - b.firstDiscoveryProgress);
+    // 按频次排序，用于散点图 X 轴
+    const sortedByFrequency = [...lexicon].sort((a, b) => b.count - a.count);
 
-    const coreLimit = Math.ceil(total * 0.15);
-    const essentialLimit = Math.ceil(total * 0.6);
+    // 1. 生成攀登曲线路径点 (仅用于 Content View)
+    const curvePoints: {x: number, y: number}[] = sortedByDiscovery.map((item, index) => ({
+      x: item.firstDiscoveryProgress * 100,
+      y: ((index + 1) / total) * 100
+    }));
 
-    let known = 0;
-    let counts = { core: 0, essential: 0, niche: 0 };
-    
-    const processed = lexicon.map((item, idx) => {
-      let band: FrequencyBand = 'niche';
-      if (idx < coreLimit) band = 'core';
-      else if (idx < essentialLimit) band = 'essential';
+    // 2. 将单词粒子映射到对应的多维坐标
+    const particles = lexicon.map((item) => {
+      const isDiscovered = item.firstDiscoveryProgress <= simulatedProgress;
+      const freqIndex = sortedByFrequency.findIndex(l => l.lemma === item.lemma);
+      const discoveryIndex = sortedByDiscovery.findIndex(l => l.lemma === item.lemma);
 
-      counts[band]++;
-      if (item.familiarity >= Familiarity.Familiar) known++;
-      
-      return { ...item, band };
+      let x = 0;
+      let y = 0;
+      let color = 'fill-ink/20';
+      let opacity = 0.2;
+
+      if (view === 'content') {
+        // 内容视角：X 为书本进度，Y 为累积发现进度
+        x = item.firstDiscoveryProgress * 100;
+        y = ((discoveryIndex + 1) / total) * 100;
+        opacity = isDiscovered ? 0.9 : 0.15;
+        color = 'fill-accent';
+      } else {
+        // 记忆或复合视角：恢复散点图 (X 为频次排行，Y 为掌握度)
+        x = (freqIndex / total) * 100;
+        y = (item.masteryScore || 0) * 100;
+        
+        if (view === 'memory') {
+          opacity = (item.masteryScore || 0) * 0.9 + 0.1;
+          color = 'fill-secondary';
+        } else {
+          // 复合现实视角：散点布局 + 发现状态过滤
+          opacity = isDiscovered ? 0.9 : 0.05;
+          color = item.masteryScore > 0.7 ? 'fill-secondary' : isDiscovered ? 'fill-accent' : 'fill-ink/10';
+        }
+      }
+
+      return {
+        ...item,
+        x, y, opacity, color, isDiscovered,
+        size: Math.log(item.count + 1.2) * 2.5 + 1.5,
+        freqRank: (freqIndex / total) * 100
+      };
     });
 
-    return { total, known, processed, counts };
-  }, [lexicon]);
+    // 3. 统计分区 (始终基于频次分布，因为分区是按词汇表重要程度划分的)
+    const filterByFreq = (minR: number, maxR: number) => particles.filter(p => p.freqRank >= minR && p.freqRank < maxR);
+    const zones = {
+      core: filterByFreq(0, 25),
+      slopes: filterByFreq(25, 70),
+      canyons: filterByFreq(70, 100)
+    };
 
-  // --- 2. Session Controls ---
-  const startSession = () => {
-    const filtered = stats.processed.filter(item => {
-      if (studyFilter.band !== 'all' && item.band !== studyFilter.band) return false;
-      if (studyFilter.status === 'new') return item.reviewCount === 0 && item.familiarity <= Familiarity.Seen;
-      if (studyFilter.status === 'review') return item.reviewCount > 0 && item.familiarity < Familiarity.Mastered;
-      if (studyFilter.status === 'mastered') return item.familiarity === Familiarity.Mastered;
-      return true;
-    });
+    return { particles, curvePoints, zones };
+  }, [lexicon, simulatedProgress, view]);
 
-    const queue = filtered.sort(() => Math.random() - 0.5).slice(0, 10);
-    setSessionQueue(queue);
+  const activeZoneWords = selectedZone ? (landscapeData.zones as any)[selectedZone] : [];
+
+  const startStudy = (words: LexiconItem[]) => {
+    if (words.length === 0) return;
+    setSessionQueue(words.sort(() => Math.random() - 0.5).slice(0, 10));
     setCurrentIndex(0);
-    setIsFlipped(false);
-    setTempDefinition(null);
     setMode('study');
   };
 
-  const handleReveal = async () => {
-    setIsFlipped(true);
-    const currentItem = sessionQueue[currentIndex];
-    setTempDefinition(null);
-
-    if (!currentItem.definition) {
-      setIsDefLoading(true);
-      try {
-        const def = await onGenerateDefinition(currentItem.lemma);
-        setTempDefinition(def);
-        onUpdateLexicon(currentItem.lemma, { definition: def });
-      } catch (e) {
-        setTempDefinition("**Error**: Failed to generate definition.");
-      } finally {
-        setIsDefLoading(false);
-      }
+  const curvePath = useMemo(() => {
+    if (landscapeData.curvePoints.length === 0) return "";
+    const points = landscapeData.curvePoints;
+    let path = `M ${points[0].x},${100 - points[0].y}`;
+    for (let i = 1; i < points.length; i++) {
+      path += ` L ${points[i].x},${100 - points[i].y}`;
     }
-  };
+    return path;
+  }, [landscapeData.curvePoints]);
 
-  const handleRate = (success: boolean) => {
-    const currentItem = sessionQueue[currentIndex];
-    let newFam = currentItem.familiarity;
-    
-    if (success) {
-      if (newFam === Familiarity.Unknown) newFam = Familiarity.Seen;
-      else if (newFam === Familiarity.Seen) newFam = Familiarity.Familiar;
-      else if (newFam === Familiarity.Familiar) newFam = Familiarity.Mastered;
-    } else {
-      if (newFam > Familiarity.Seen) newFam = Familiarity.Seen;
-    }
-
-    onUpdateLexicon(currentItem.lemma, { familiarity: newFam, reviewCount: currentItem.reviewCount + 1 });
-
-    if (currentIndex < sessionQueue.length - 1) {
-      setIsFlipped(false);
-      setTempDefinition(null);
-      setCurrentIndex(prev => prev + 1);
-    } else {
-      setMode('dashboard');
-    }
-  };
-
-  // --- Dashboard Components ---
-  if (mode === 'dashboard') {
-    const coverage = stats.total > 0 ? Math.round((stats.known / stats.total) * 100) : 0;
-    
-    if (isExpanded) {
-      return (
-        <div className="h-full flex flex-col md:flex-row gap-20 animate-fade-in no-scrollbar overflow-hidden">
-          {/* LEFT: Project Overview & Stats */}
-          <div className="w-full md:w-[350px] flex-shrink-0 flex flex-col pt-4">
-             <div className="mb-16">
-                <div className="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-300 mb-6">Aggregate Mastery</div>
-                <div className="flex items-baseline gap-4 mb-8">
-                   <span className="text-7xl font-display text-ink tracking-tighter">{coverage}%</span>
-                   <span className="text-sm font-serif italic text-gray-400">Project Coverage</span>
-                </div>
-                <div className="relative h-1 w-full bg-gray-100 rounded-full overflow-hidden mb-12">
-                   <div className="absolute top-0 left-0 h-full bg-accent transition-all duration-1000" style={{ width: `${coverage}%` }} />
-                </div>
-                <p className="text-base text-gray-500 font-serif leading-relaxed italic pr-4">
-                  "Linguistic mapping across {bookCount} texts. Focus shifts to high-frequency core lexicon."
-                </p>
-             </div>
-
-             <div className="space-y-12">
-                <div>
-                   <label className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-400 mb-6 block">Band Selector</label>
-                   <div className="flex flex-wrap gap-3">
-                      {(['core', 'essential', 'niche'] as FrequencyBand[]).map(band => (
-                        <button 
-                          key={band} 
-                          onClick={() => setStudyFilter(prev => ({ ...prev, band }))}
-                          className={`
-                            px-5 py-2 text-[10px] uppercase tracking-[0.2em] font-bold rounded-full transition-all border-2
-                            ${studyFilter.band === band ? 'bg-ink border-ink text-white' : 'bg-transparent border-gray-100 text-gray-400 hover:border-gray-300'}
-                          `}
-                        >
-                          {band}
-                        </button>
-                      ))}
-                   </div>
-                </div>
-
-                <div>
-                   <label className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-400 mb-6 block">Filter Queue</label>
-                   <div className="flex flex-wrap gap-3">
-                      {(['new', 'review', 'mastered'] as const).map(s => (
-                        <button 
-                          key={s} 
-                          onClick={() => setStudyFilter(prev => ({ ...prev, status: s }))}
-                          className={`
-                            px-5 py-2 text-[10px] uppercase tracking-[0.2em] font-bold rounded-full transition-all border-2
-                            ${studyFilter.status === s ? 'bg-secondary border-secondary text-ink' : 'bg-transparent border-gray-100 text-gray-400 hover:border-gray-300'}
-                          `}
-                        >
-                          {s}
-                        </button>
-                      ))}
-                   </div>
-                </div>
-
-                <div className="pt-8">
-                   <button 
-                    onClick={startSession} 
-                    className="w-full py-5 bg-ink hover:bg-black text-white text-[11px] font-bold uppercase tracking-[0.4em] transition-all transform hover:-translate-y-1 rounded shadow-float flex items-center justify-center gap-4"
-                   >
-                     Initiate Session
-                     <span className="opacity-40 tracking-normal text-xs font-mono">→</span>
-                   </button>
-                </div>
-             </div>
-          </div>
-
-          {/* RIGHT: Large Vocabulary Matrix */}
-          <div className="flex-1 flex flex-col min-h-0 pt-4">
-             <div className="flex justify-between items-baseline mb-12 border-b border-black/5 pb-4">
-                <h3 className="text-xs font-bold uppercase tracking-[0.5em] text-gray-900">Vocabulary Matrix</h3>
-                <span className="text-[10px] text-gray-300 italic font-serif">Project-wide distribution index</span>
-             </div>
-             
-             <div className="flex-1 overflow-y-auto pr-6 no-scrollbar pb-20">
-               <table className="w-full text-left">
-                 <thead>
-                   <tr className="text-[10px] uppercase tracking-[0.3em] text-gray-300">
-                     <th className="pb-8 font-bold w-1/3">Lemma</th>
-                     <th className="pb-8 font-bold">Encounters</th>
-                     <th className="pb-8 font-bold">Context Band</th>
-                     <th className="pb-8 font-bold text-right">Progress</th>
-                   </tr>
-                 </thead>
-                 <tbody className="divide-y divide-gray-50">
-                   {stats.processed.map((item) => (
-                     <tr key={item.lemma} className="group hover:bg-surface/30 transition-colors">
-                       <td className="py-10">
-                          <div className="font-serif text-3xl text-ink font-medium tracking-tight group-hover:text-accent transition-colors">{item.lemma}</div>
-                          <div className="text-[10px] text-gray-300 uppercase tracking-widest mt-2">{item.reviewCount} manual synthesis attempts</div>
-                       </td>
-                       <td className="py-10 text-gray-400 font-mono text-base">{item.count}</td>
-                       <td className="py-10">
-                          <span className={`text-[10px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full border-2 ${item.band === 'core' ? 'bg-ink text-white border-ink' : item.band === 'essential' ? 'bg-transparent text-gray-400 border-gray-100' : 'bg-transparent text-gray-300 border-gray-50'}`}>
-                            {item.band}
-                          </span>
-                       </td>
-                       <td className="py-10 text-right">
-                          <div className="flex justify-end gap-3">
-                             {[1,2,3].map(lvl => (
-                                <div key={lvl} className={`w-3.5 h-3.5 rounded-full transition-all duration-700 ${item.familiarity >= lvl ? 'bg-secondary' : 'bg-gray-100'}`} />
-                             ))}
-                          </div>
-                       </td>
-                     </tr>
-                   ))}
-                 </tbody>
-               </table>
-             </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Default Sidebar View
+  if (mode === 'study') {
+    const current = sessionQueue[currentIndex];
+    if (!current) { setMode('browse'); return null; }
     return (
-      <div className="h-full flex flex-col font-sans animate-fade-in">
-        <div className="bg-surface rounded-lg p-6 mb-8 text-center border border-black/5">
-           <div className="text-4xl font-display text-ink mb-2">{coverage}%</div>
-           <div className="text-[9px] uppercase tracking-[0.2em] text-gray-400">Synthesis Score</div>
+      <div className="h-full flex flex-col p-12 bg-white/60 backdrop-blur-2xl rounded-[3rem] animate-fade-in border border-black/5 shadow-float">
+        <div className="flex justify-between items-center mb-16">
+          <button onClick={() => setMode('browse')} className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-400 hover:text-accent">← EXIT STUDY</button>
+          <div className="text-[10px] text-gray-300 font-bold tracking-widest uppercase">SYNERGY {currentIndex + 1} / {sessionQueue.length}</div>
         </div>
-        <div className="mt-auto mb-10">
-           <button onClick={startSession} className="w-full py-4 bg-accent text-white text-[10px] font-bold uppercase tracking-[0.2em] rounded shadow-soft">
-             Launch Session
-           </button>
+        <div className="flex-1 flex flex-col items-center justify-center text-center">
+          <div className="text-[10px] px-5 py-2 bg-secondary/10 text-secondary rounded-full mb-8 font-bold uppercase tracking-widest">Mastery: {Math.round(current.masteryScore * 100)}%</div>
+          <h2 className="text-[10rem] font-display text-ink mb-12 tracking-tighter leading-none">{current.lemma}</h2>
+          <div className="w-full max-w-sm space-y-4">
+             <button onClick={() => { onUpdateLexicon(current.lemma, {}); if (currentIndex < sessionQueue.length - 1) setCurrentIndex(c => c+1); else setMode('browse'); }} className="w-full py-6 bg-ink text-white rounded-2xl font-bold uppercase tracking-widest text-xs hover:bg-black transition-all shadow-2xl active:scale-95">Mark Mastered</button>
+             <button onClick={() => setMode('browse')} className="w-full py-4 text-gray-400 font-bold uppercase tracking-widest text-[10px] hover:text-ink transition-colors">Return</button>
+          </div>
         </div>
       </div>
     );
   }
 
-  // --- FLASHCARD SESSION VIEW ---
-  const currentItem = sessionQueue[currentIndex];
-  
   return (
-    <div className="h-full flex flex-col font-sans pt-0 animate-fade-in overflow-hidden max-w-4xl mx-auto w-full">
-      <div className="flex justify-between items-baseline border-b border-black/5 pb-6 mb-12 flex-shrink-0">
-        <button onClick={() => setMode('dashboard')} className="group flex items-center gap-4 text-[11px] font-bold text-gray-400 hover:text-ink uppercase tracking-[0.3em] transition-colors">
-          <span className="group-hover:-translate-x-1 transition-transform">←</span>
-          Exit Terminal
-        </button>
-        <div className="text-[11px] text-gray-400 font-mono tracking-[0.2em]">{currentIndex + 1} / {sessionQueue.length} Queue</div>
-      </div>
-
-      <div className="flex-1 flex flex-col relative perspective-2000">
-        <div 
-          onClick={() => !isFlipped && handleReveal()}
-          className={`relative flex-1 w-full bg-white transition-all duration-1000 transform-style-3d cursor-pointer shadow-float rounded-2xl border border-black/5 ${isFlipped ? 'rotate-y-180' : ''}`}
-        >
-           {/* Front: Encounter Context */}
-           <div className={`absolute inset-0 flex flex-col justify-center items-center p-16 backface-hidden transition-all duration-500 ${isFlipped ? 'opacity-0' : 'opacity-100'}`}>
-              <div className="text-[11px] text-accent uppercase tracking-[0.5em] mb-12 font-bold">{currentItem.reviewCount > 0 ? `Recurring Encounter (${currentItem.reviewCount})` : 'New Recognition'}</div>
-              <h2 className="text-7xl md:text-8xl font-display font-medium text-ink mb-20 text-center tracking-tight leading-none">{currentItem.lemma}</h2>
-              <div className="text-center italic font-serif text-2xl text-gray-500 leading-[1.8] max-w-2xl px-8 opacity-90">
-                 "{currentItem.occurrences[0]?.sentenceText}"
+    <div className="h-full flex gap-12 overflow-hidden">
+      {/* 1. 地形主场 */}
+      <div className="flex-[3] flex flex-col min-w-0">
+        <div className="flex justify-between items-end mb-12">
+           <div>
+              <div className="flex gap-6 mb-3">
+                 {(['content', 'memory', 'reality'] as TopographyView[]).map(v => (
+                   <button key={v} onClick={() => setView(v)} className={`text-[11px] font-bold uppercase tracking-[0.2em] transition-all relative ${view === v ? 'text-accent' : 'text-gray-300 hover:text-gray-400'}`}>
+                      {v} map
+                      {view === v && <div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-accent rounded-full" />}
+                   </button>
+                 ))}
               </div>
-              <div className="mt-20 text-[10px] text-gray-300 uppercase tracking-[0.6em] border-t border-black/5 pt-10 w-full text-center animate-pulse">凝视以解构 (Gaze to decode)</div>
+              <h3 className="text-5xl font-display text-ink tracking-tight">
+                {view === 'content' ? 'Reading Trajectory' : 'Mastery Topography'}
+              </h3>
            </div>
-
-           {/* Back: Deep Interpretation */}
-           <div className={`absolute inset-0 flex flex-col p-16 backface-hidden rotate-y-180 bg-paper transition-all duration-500 ${isFlipped ? 'opacity-100' : 'opacity-0'} overflow-hidden rounded-2xl`}>
-              <div className="flex-1 flex flex-col min-h-0">
-                 <div className="text-center mb-16">
-                    <h2 className="text-5xl font-display font-medium text-ink">{currentItem.lemma}</h2>
-                    <div className="h-0.5 w-20 bg-accent/30 mx-auto mt-8"></div>
-                 </div>
-                 
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-20 flex-1 min-h-0">
-                    <div className="flex flex-col overflow-y-auto no-scrollbar">
-                       <h4 className="text-[11px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-10 border-b border-black/5 pb-3">AI Synthesis</h4>
-                       <div className="prose prose-sm font-serif text-gray-800 text-xl leading-[1.7]">
-                          {tempDefinition || currentItem.definition ? (
-                             <ReactMarkdown>{tempDefinition || currentItem.definition || ''}</ReactMarkdown>
-                          ) : isDefLoading ? (
-                             <SkeletonLoader lines={10} className="opacity-40" />
-                          ) : (
-                             <p className="text-lg italic text-gray-400">Seeking linguistic root...</p>
-                          )}
-                       </div>
-                    </div>
-
-                    <div className="flex flex-col overflow-y-auto no-scrollbar border-l border-black/5 pl-16">
-                       <h4 className="text-[11px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-10 border-b border-black/5 pb-3">Project Trace</h4>
-                       <div className="space-y-10">
-                          {currentItem.occurrences.map((occ, idx) => (
-                             <div key={idx} className="group/occ">
-                                <p className="text-xl font-serif leading-relaxed text-gray-400 line-clamp-3 italic group-hover:text-gray-600 transition-colors">
-                                   "{occ.sentenceText}"
-                                </p>
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onNavigateToContext(occ.bookId, occ.sentenceId, occ.wordId);
-                                  }}
-                                  className="mt-4 text-[11px] text-accent hover:text-ink font-bold uppercase tracking-[0.3em] opacity-0 group-hover/occ:opacity-100 transition-all flex items-center gap-2"
-                                >
-                                   Return to Context <span>→</span>
-                                </button>
-                             </div>
-                          ))}
-                       </div>
-                    </div>
-                 </div>
+           
+           <div className="w-72 text-right">
+              <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">
+                 <span>Reading Journey</span>
+                 <span className="text-accent">{Math.round(simulatedProgress * 100)}%</span>
               </div>
+              <div className="relative h-1 bg-gray-100 rounded-full cursor-pointer group">
+                 <input type="range" min="0" max="1" step="0.005" value={simulatedProgress} onChange={(e) => setSimulatedProgress(parseFloat(e.target.value))} className="absolute inset-0 w-full opacity-0 z-10 cursor-pointer" />
+                 <div className="absolute h-full bg-accent rounded-full transition-all duration-300" style={{ width: `${simulatedProgress * 100}%` }} />
+                 <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white border-2 border-accent rounded-full shadow-md" style={{ left: `${simulatedProgress * 100}%` }} />
+              </div>
+           </div>
+        </div>
 
-              <div className="mt-12 pt-10 border-t border-black/5 flex justify-center gap-4 flex-shrink-0">
-                  {[1,2,3].map(lvl => (
-                      <div key={lvl} className={`w-3.5 h-3.5 rounded-full transition-all duration-700 ${currentItem.familiarity >= lvl ? 'bg-secondary' : 'bg-gray-100'}`} />
-                  ))}
+        <div className="flex-1 bg-white/40 rounded-[3.5rem] border border-black/5 relative overflow-hidden group">
+           <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full p-20 overflow-visible">
+              <defs>
+                 <linearGradient id="curveGradient" x1="0%" y1="100%" x2="0%" y2="0%">
+                    <stop offset="0%" stopColor="rgba(194,142,91,0.02)" />
+                    <stop offset="100%" stopColor="rgba(194,142,91,0.2)" />
+                 </linearGradient>
+              </defs>
+
+              {/* 网格线 */}
+              {[25, 50, 75].map(p => (
+                <line key={p} x1={p} y1="0" x2={p} y2="100" stroke="rgba(0,0,0,0.02)" strokeWidth="0.2" />
+              ))}
+              {[25, 50, 75].map(p => (
+                <line key={p} x1="0" y1={p} x2="100" y2={p} stroke="rgba(0,0,0,0.02)" strokeWidth="0.2" />
+              ))}
+
+              {/* 仅内容视角：绘制 CDF 曲线 */}
+              {view === 'content' && (
+                <path d={`${curvePath} L 100,100 L 0,100 Z`} fill="url(#curveGradient)" className="transition-all duration-1000" />
+              )}
+
+              {/* 仅内容视角：垂直进度线 */}
+              {view === 'content' && (
+                <line x1={simulatedProgress * 100} y1="0" x2={simulatedProgress * 100} y2="100" stroke="rgba(194,142,91,0.4)" strokeWidth="0.3" strokeDasharray="1,1" />
+              )}
+
+              {/* 词汇粒子 */}
+              {landscapeData.particles.map((d) => (
+                <circle 
+                  key={d.lemma} cx={d.x} cy={100 - d.y} r={d.size / 6} 
+                  className={`transition-all duration-1000 cursor-pointer ${d.color} ${selectedZone && !activeZoneWords.includes(d) ? 'opacity-0 blur-md' : ''}`}
+                  style={{ opacity: d.opacity }}
+                />
+              ))}
+
+              {/* 坐标说明 */}
+              <text x="0" y="105%" className="text-[1.8px] fill-gray-300 font-bold uppercase tracking-[0.2em]">
+                {view === 'content' ? 'Book Start' : 'High Frequency'}
+              </text>
+              <text x="90" y="105%" className="text-[1.8px] fill-gray-300 font-bold uppercase tracking-[0.2em]">
+                {view === 'content' ? 'End' : 'Niche'}
+              </text>
+              <text x="-5" y="5" transform="rotate(-90, -5, 5)" className="text-[1.8px] fill-gray-300 font-bold uppercase tracking-[0.2em]">
+                {view === 'content' ? 'Cumulative Volume' : 'Mastery'}
+              </text>
+           </svg>
+           
+           <div className="absolute top-10 right-10 bg-white/80 backdrop-blur-md p-6 rounded-2xl border border-black/5 shadow-soft pointer-events-none">
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                {view === 'content' ? 'Climbing Index' : 'Consolidation State'}
+              </div>
+              <div className="text-3xl font-display text-ink">
+                {view === 'content' ? 'Steep' : 'Floating'}
+              </div>
+              <div className="mt-3 space-y-1">
+                 <div className="flex justify-between text-[9px] gap-8">
+                    <span className="text-gray-400">Unique Tokens</span>
+                    <span className="font-bold">{lexicon.length}</span>
+                 </div>
+                 <div className="flex justify-between text-[9px]">
+                    <span className="text-gray-400">Avg. Mastery</span>
+                    <span className="font-bold">{Math.round((lexicon.reduce((acc, l) => acc + (l.masteryScore || 0), 0) / lexicon.length) * 100)}%</span>
+                 </div>
               </div>
            </div>
         </div>
       </div>
 
-      <div className="h-32 flex items-center justify-center gap-16 mt-12 flex-shrink-0">
-        {isFlipped ? (
-          <>
-            <button onClick={() => handleRate(false)} className="group w-20 h-20 rounded-full border border-gray-100 text-gray-300 hover:border-accent hover:text-accent transition-all flex items-center justify-center bg-white shadow-soft">
-               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10 group-hover:scale-90 transition-transform"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-            <button onClick={() => handleRate(true)} className="group w-24 h-24 rounded-full bg-ink text-white shadow-float hover:bg-black hover:scale-110 transition-all flex items-center justify-center">
-               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-12 h-12 group-hover:scale-110 transition-transform"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-            </button>
-          </>
-        ) : (
-          <div className="text-[11px] text-gray-300 uppercase tracking-[0.6em] animate-pulse">Intent required to deconstruct</div>
-        )}
+      {/* 2. 探索注册表 */}
+      <div className="flex-1 flex flex-col gap-6 w-[420px] pb-8">
+         <div className="space-y-4">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400 ml-1">Topographical Segments</label>
+            <div className="grid grid-cols-1 gap-3">
+               {[
+                 { id: 'core', label: 'Basal Plains', desc: '文本基石，极高频词汇', count: landscapeData.zones.core.length },
+                 { id: 'slopes', label: 'Narrative Slopes', desc: '叙事骨干，中频常用表达', count: landscapeData.zones.slopes.length },
+                 { id: 'canyons', label: 'Niche Summits', desc: '文学之眼，低频生僻修辞', count: landscapeData.zones.canyons.length }
+               ].map(r => (
+                 <button 
+                  key={r.id} 
+                  onClick={() => setSelectedZone(selectedZone === r.id ? null : r.id)}
+                  className={`p-6 rounded-[2rem] border text-left transition-all group relative overflow-hidden ${selectedZone === r.id ? 'border-accent bg-white shadow-float scale-[1.02]' : 'border-black/5 bg-surface/50 hover:bg-white'}`}
+                 >
+                    <div className="flex justify-between items-center relative z-10">
+                       <div>
+                          <span className="font-display text-2xl text-ink group-hover:text-accent transition-colors">{r.label}</span>
+                          <p className="text-[9px] text-gray-400 mt-1 uppercase tracking-wider">{r.desc}</p>
+                       </div>
+                       <div className="text-right">
+                          <span className="text-lg font-display text-ink/30">{r.count}</span>
+                          <div className="text-[8px] text-gray-300 font-bold uppercase">Tokens</div>
+                       </div>
+                    </div>
+                 </button>
+               ))}
+            </div>
+         </div>
+
+         {selectedZone ? (
+           <div className="flex-1 flex flex-col bg-white border border-black/5 rounded-[3rem] overflow-hidden animate-fade-in-up shadow-float">
+              <div className="p-8 border-b border-black/5 flex justify-between items-center bg-paper/20">
+                 <div>
+                    <h4 className="font-display text-2xl capitalize text-ink">{selectedZone} Registry</h4>
+                    <p className="text-[9px] text-gray-400 uppercase tracking-widest mt-1">Lexical Reinforcement</p>
+                 </div>
+                 <button onClick={() => startStudy(activeZoneWords)} className="px-6 py-2.5 bg-ink text-white rounded-full font-bold uppercase tracking-widest text-[10px] hover:bg-accent transition-all active:scale-95 shadow-lg">Study All</button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-2 no-scrollbar">
+                 {activeZoneWords.sort((a:any, b:any) => b.count - a.count).map((word: any) => (
+                   <div key={word.lemma} className="flex items-center justify-between p-4 hover:bg-accent/5 rounded-[1.5rem] group transition-all">
+                      <div className="flex items-baseline gap-3">
+                         <div className="text-lg font-serif text-ink">{word.lemma}</div>
+                         <div className="text-[9px] text-gray-400 uppercase font-bold tracking-tighter">{word.count}x</div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                         <div className="w-16 h-1 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-secondary transition-all duration-1000" style={{ width: `${word.masteryScore * 100}%` }} />
+                         </div>
+                      </div>
+                   </div>
+                 ))}
+              </div>
+           </div>
+         ) : (
+           <div className="flex-1 bg-surface/30 p-12 rounded-[3rem] border border-black/5 border-dashed flex flex-col justify-center items-center text-center opacity-40">
+              <p className="text-xs font-serif text-gray-500 leading-relaxed italic max-w-[200px]">Select a topographical segment to inspect details.</p>
+           </div>
+         )}
       </div>
     </div>
   );

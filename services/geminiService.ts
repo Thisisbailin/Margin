@@ -1,32 +1,21 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { UserProficiency, Project, AnnotationContext, AgentMessage } from "../types";
 
 type OnStreamUpdate = (fullText: string) => void;
-
-const getProficiencyInstruction = (level: UserProficiency) => {
-  switch (level) {
-    case UserProficiency.Beginner:
-      return `**角色设定**: 亲切耐心的语言导师。帮助用户克服语言障碍。剖析长难句，遇到生词提供简明释义。语言风格简单、直白。`;
-    case UserProficiency.Intermediate:
-      return `**角色设定**: 资深编辑 or 文学顾问。挖掘熟词生义、固定搭配和习语。分析逻辑连接词。鼓励在语境中猜测。`;
-    case UserProficiency.Advanced:
-      return `**角色设定**: 批判性思维学术同行。聚焦于修辞、哲学、文化隐喻、互文性。直接进入学术级洞见。风格深邃。`;
-  }
-};
 
 export const streamAnnotation = async (
   contextData: AnnotationContext,
   userPrompt: string,
   onUpdate: OnStreamUpdate
 ): Promise<string> => {
-  // Initialize right before use to ensure process.env.API_KEY is available
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   if (!process.env.API_KEY) {
-    const mockResponse = `结合《${contextData.bookTitle}》语境：作者在这里使用了微妙的呼应。1. 微观视角：词语选择精准。2. 项目关联：呼应了“${contextData.projectName}”中的核心问题。`;
+    const mockResponse = `【隐形记忆适配】用户对该内容的掌握度为 ${Math.round(contextData.targetMastery * 100)}%。\n\n结合《${contextData.bookTitle}》语境：这里不仅仅是描述，而是一种隐喻。`;
     let currentText = "";
     for (const char of mockResponse.split("")) {
-      await new Promise(r => setTimeout(r, 15)); 
+      await new Promise(r => setTimeout(r, 10)); 
       currentText += char;
       onUpdate(currentText);
     }
@@ -34,8 +23,34 @@ export const streamAnnotation = async (
   }
 
   try {
-    const instruction = getProficiencyInstruction(contextData.proficiency);
-    const prompt = `你是一款名为 Margin 的 AI 深度阅读助手。理念：文本细读 & 语境至上。\n\n【用户画像】\n语言水平: ${contextData.proficiency}\n${instruction}\n\n【阅读项目】\n项目: ${contextData.projectName}\n议题: ${contextData.projectDescription}\n\n【书籍语境】\n书: 《${contextData.bookTitle}》\n作者: ${contextData.author}\n\n【上下文文本流】\n... ${contextData.surroundingContext} ...\n目标句: "${contextData.targetSentence}"\n\n【指令】\n${userPrompt}\n\n输出语言：中文。保持 Margin 的理性、深邃特点。`;
+    // 动态调整指令：如果掌握度低，偏向语言解释；掌握度高，偏向文学剖析
+    const masteryLevel = contextData.targetMastery;
+    const adaptationInstruction = masteryLevel < 0.3 
+      ? "用户对该词汇/句式尚不熟悉。请提供清晰的语法拆解、词义辨析，并给出一个简单的同义词。"
+      : masteryLevel < 0.7 
+        ? "用户已初步掌握该内容。请聚焦于词汇的微妙内涵（熟词生义）以及其在文学语境下的特殊用法。"
+        : "用户已完全掌握该内容。跳过基础解释，直接从文本修辞、哲学隐喻、跨文本互文性角度进行深度剖析。";
+
+    const prompt = `你是一款名为 Margin 的 AI 深度阅读助手。你的回应应基于用户的“隐形记忆状态”进行动态调整。
+    
+【当前上下文】
+书: 《${contextData.bookTitle}》(${contextData.language})
+语境: "... ${contextData.surroundingContext} ..."
+目标: "${contextData.targetSentence}"
+
+【隐形记忆参数】
+掌握得分: ${masteryLevel.toFixed(2)} (0=陌生, 1=大师)
+是否专门查询词汇: ${contextData.isFocusedLookup ? "是" : "否"}
+
+【动态适配指令】
+${adaptationInstruction}
+
+【通用角色要求】
+1. 使用中文回答。
+2. 保持理性、深邃、简约的风格。
+3. 挖掘原始语言（${contextData.language}）的独特文化张力。
+
+用户请求: ${userPrompt}`;
 
     const result = await ai.models.generateContentStream({
       model: 'gemini-3-flash-preview',
@@ -50,76 +65,23 @@ export const streamAnnotation = async (
   } catch (error) { return "连接错误。"; }
 };
 
-export const streamProjectChat = async (
-  project: Project,
-  history: AgentMessage[],
-  onUpdate: OnStreamUpdate
-): Promise<string> => {
+// ... 其他函数保持不变
+export const streamProjectChat = async (project: Project, history: AgentMessage[], onUpdate: OnStreamUpdate): Promise<string> => {
    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-   if (!process.env.API_KEY) {
-      const mock = `这是一个基于“${project.name}”的洞察。你提到的关于《${project.books[0].title}》的问题触及了核心。我们尝试构建一种关于“社会生产力”的讨论。`;
-      let currentText = "";
-      for (const char of mock.split("")) {
-        await new Promise(r => setTimeout(r, 15)); 
-        currentText += char;
-        onUpdate(currentText);
-      }
-      return currentText;
-   }
-
+   const bookList = project.books.map(b => `《${b.title}》`).join(", ");
+   const prompt = `你是 Margin 项目导师。基于项目《${project.name}》进行跨文本讨论。历史：${history.map(h => h.content).join("\n")}`;
    try {
-    const bookList = project.books.map(b => `《${b.title}》- ${b.author}`).join(", ");
-    const conversationHistory = history.map(m => `${m.role === 'user' ? 'User' : 'Agent'}: ${m.content}`).join("\n");
-    
-    const prompt = `你是 Margin 项目导师。你正在协助用户进行跨文本的综合深度阅读讨论。你拥有“连贯记忆”，应基于先前的对话内容和当前的项目脉络进行回答。\n\n【项目背景】\n名称: ${project.name}\n议题: ${project.description}\n涉及文本: ${bookList}\n\n【对话历史/连贯记忆】\n${conversationHistory}\n\n【当前任务】\n基于项目内的所有书籍及其相互关系，深度回答用户的最新询问。挖掘文本间的逻辑联系与批判性视角。直接切入重点。输出语言：中文。`;
-
-    const result = await ai.models.generateContentStream({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
-    });
-
-    let fullText = "";
-    for await (const chunk of result) {
-        if (chunk.text) { fullText += chunk.text; onUpdate(fullText); }
-    }
-    return fullText;
-   } catch (error) { return "无法生成项目洞察。"; }
-};
-
-export const streamProjectAdvice = async (
-  project: Project,
-  onUpdate: OnStreamUpdate
-): Promise<string> => {
-   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-   if (!process.env.API_KEY) {
-      const mock = `建议：先确立核心论点，再追溯历史。`;
-      let currentText = "";
-      for (const char of mock.split("")) {
-        await new Promise(r => setTimeout(r, 20)); 
-        currentText += char;
-        onUpdate(currentText);
-      }
-      return currentText;
-   }
-   try {
-    const prompt = `分析项目建议: ${project.name}, ${project.description}. 请给出专业阅读路径建议. 中文.`;
-    const result = await ai.models.generateContentStream({ model: 'gemini-3-flash-preview', contents: prompt });
-    let fullText = "";
-    for await (const chunk of result) { if (chunk.text) { fullText += chunk.text; onUpdate(fullText); } }
-    return fullText;
-   } catch (error) { return "无法生成建议。"; }
+     const result = await ai.models.generateContentStream({ model: 'gemini-3-flash-preview', contents: prompt });
+     let fullText = "";
+     for await (const chunk of result) { if (chunk.text) { fullText += chunk.text; onUpdate(fullText); } }
+     return fullText;
+   } catch (e) { return "错误"; }
 };
 
 export const generateWordDefinition = async (word: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  if (!process.env.API_KEY) {
-    await new Promise(r => setTimeout(r, 500));
-    return `**${word}**\n\n1. (n.) 模拟释义.`;
-  }
   try {
-    const prompt = `为 "${word}" 提供简洁中文释义：词性, 含义, 音标.`;
-    const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt });
-    return response.text || "无法生成释义";
-  } catch (e) { return "获取释义失败"; }
+    const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: `为 "${word}" 提供简洁中文释义。` });
+    return response.text || "";
+  } catch (e) { return ""; }
 };

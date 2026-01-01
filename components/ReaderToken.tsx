@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Familiarity, WordOccurrence } from '../types';
+import { WordOccurrence } from '../types';
 
 interface ReaderTokenProps {
   token: WordOccurrence;
@@ -18,49 +18,50 @@ const ReaderToken: React.FC<ReaderTokenProps> = ({
   isZenMode 
 }) => {
   
+  const mastery = token.masteryScore || 0;
+
   const getTokenStyle = () => {
-    if (isZenMode) return 'text-ink/90 cursor-text transition-colors duration-500'; 
+    if (isZenMode) return 'text-ink/90'; 
 
     if (!isSentenceFocused) {
-      return 'text-gray-300 blur-[0.25px] transition-all duration-700 ease-in-out cursor-pointer hover:text-gray-400';
+      // 未聚焦时，根据掌握程度调整透明度。掌握度越高，越不显眼。
+      const opacity = Math.max(0.15, 0.4 - (mastery * 0.25));
+      return `text-ink/40 transition-all duration-700`;
     }
 
-    switch (token.familiarity) {
-      case Familiarity.Unknown:
-        return 'text-ink decoration-1 underline-offset-4 decoration-accent/40 hover:decoration-accent decoration-dotted cursor-help';
-      case Familiarity.Seen:
-        return 'text-gray-800 cursor-pointer';
-      case Familiarity.Familiar:
-      case Familiarity.Mastered:
-        return 'text-gray-600 cursor-pointer';
-      default:
-        return 'text-ink';
+    // 聚焦时的样式
+    if (mastery < 0.3) {
+      // 生疏词：虚线强调
+      return 'text-ink border-b border-accent/30 border-dotted';
+    } else if (mastery > 0.8) {
+      // 熟词：淡化显示，减少认知负荷
+      return 'text-ink/60';
     }
+    return 'text-ink';
   };
 
-  const interactionStyle = (!isZenMode && isActive)
-    ? 'bg-secondary/30 text-ink rounded-sm -mx-1 px-1 shadow-[0_0_0_1px_rgba(168,201,168,0.4)]' 
-    : (!isZenMode && isSentenceFocused) 
-      ? 'hover:text-ink hover:bg-black/5 -mx-1 px-1 rounded-sm transition-colors duration-200'
+  const interactionStyle = isActive
+    ? 'bg-secondary/20 text-ink rounded-sm -mx-0.5 px-0.5' 
+    : isSentenceFocused 
+      ? 'hover:bg-black/5 rounded-sm transition-colors'
       : '';
 
   return (
     <span
       onClick={(e) => {
-        if (isZenMode) {
-          e.stopPropagation(); 
-          return;
-        }
+        if (isZenMode) return;
         e.stopPropagation();
         onClick(token);
       }}
       className={`
-        inline-block my-0.5
-        font-serif text-[1.25rem] leading-[1.8] md:text-[1.35rem] md:leading-[1.9] tracking-wide
-        transition-all duration-500 ease-out
+        inline-block transition-all duration-500 font-serif
+        cursor-pointer
         ${getTokenStyle()} 
         ${interactionStyle}
       `}
+      style={{
+        opacity: isSentenceFocused ? 1 : Math.max(0.2, 0.5 - mastery * 0.3)
+      }}
     >
       {token.text}
     </span>

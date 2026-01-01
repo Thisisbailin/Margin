@@ -1,55 +1,78 @@
-import { Book, Familiarity, Project, Sentence, WordOccurrence } from './types';
 
-// Helper to mock parsing text into our domain model
-const parseTextToSentences = (text: string, startId: number): Sentence[] => {
-  const rawSentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-  
-  return rawSentences.map((s, sIdx) => {
-    const words = s.trim().split(/\s+/);
-    const tokens: WordOccurrence[] = words.map((w, wIdx) => {
-      const cleanWord = w.replace(/[.,!?;:"]/g, '');
-      return {
-        id: `s${startId + sIdx}-w${wIdx}`,
-        text: w,
-        lemma: cleanWord.toLowerCase(),
-        pos: 'noun', // Mock POS
-        familiarity: Math.random() > 0.85 ? Familiarity.Unknown : Familiarity.Mastered, // Mostly known for flow
-        translation: 'Mock Translation'
-      };
+import { Book, Familiarity, Project, Sentence, WordOccurrence, Paragraph, Chapter } from './types';
+
+const parseChapterContent = (text: string, bookId: string, chIdx: number): Paragraph[] => {
+  const blocks = text.split(/\n\s*\n/);
+  return blocks.map((block, pIdx) => {
+    const rawSentences = block.match(/[^.!?]+[.!?]*/g) || [block];
+    const sentences: Sentence[] = rawSentences.map((s, sIdx) => {
+      const words = s.trim().split(/\s+/);
+      const tokens: WordOccurrence[] = words.map((w, wIdx) => {
+        const cleanLemma = w.replace(/[.,!?;:«»"()]/g, '').toLowerCase();
+        // Updated to match WordOccurrence interface: removed invalid familiarity and added masteryScore
+        return {
+          id: `${bookId}-c${chIdx}-p${pIdx}-s${sIdx}-w${wIdx}`,
+          text: w,
+          lemma: cleanLemma,
+          pos: 'unknown',
+          masteryScore: Math.random() > 0.9 ? 0.1 : 0.9,
+        };
+      });
+      return { id: `${bookId}-c${chIdx}-p${pIdx}-s${sIdx}`, text: s.trim(), tokens };
     });
-
-    return {
-      id: `s${startId + sIdx}`,
-      text: s.trim(),
-      tokens
-    };
+    // 简单逻辑：如果包含引号通常标记为对话或散文
+    const type = block.includes('"') || block.includes('«') ? 'dialogue' : 'prose';
+    return { id: `${bookId}-c${chIdx}-p${pIdx}`, type, sentences };
   });
 };
 
-const text1 = `In this economy, even spectators are transformed into workers. As Jonathan Beller argues, cinema and its derivatives (television, Internet, and so on) are factories, in which spectators work. Now, "to look is to labor." Cinema, which integrated the logic of Taylorist production and the conveyor belt, now spreads the factory wherever it travels. But this type of production is much more intensive than the industrial one. The senses are drafted into production, the media capitalize upon the aesthetic faculties and imaginary practices of viewers.`;
+const ppCh1 = `Lorsque j’avais six ans j’ai vu, une fois, une magnifique image, dans un livre sur la Forêt Vierge qui s’appelait "Histoires Vécues". Ça représentait un serpent boa qui avalait un fauve. Voilà la copie du dessin.
 
-const text2 = `The work of art in the age of mechanical reproduction. Even the most perfect reproduction of a work of art is lacking in one element: its presence in time and space, its unique existence at the place where it happens to be. This unique existence of the work of art determined the history to which it was subject throughout the time of its existence.`;
+J’ai montré mon chef-d’œuvre aux grandes personnes et je leur ai demandé si mon dessin leur faisait peur. Elles m’ont répondu : "Pourquoi un chapeau ferait-il peur ?" Mon dessin ne représentait pas un chapeau. Il représentait un serpent boa qui digérait un éléphant.`;
 
-const createBook = (id: string, title: string, author: string, text: string, progress: number): Book => ({
-  id,
-  title,
-  author,
-  progress,
-  content: parseTextToSentences(text, parseInt(id) * 100)
-});
+const ppCh2 = `J’ai ainsi vécu seul, sans personne avec qui parler véritablement, jusqu’à une panne dans le désert du Sahara, il y a six ans. Quelque chose s’était cassé dans mon moteur.
+
+Le premier soir je me suis donc endormi sur le sable à mille milles de toute terre habitée. J’étais bien plus isolé qu’un naufragé sur un radeau au milieu de l’océan. Alors vous imaginez ma surprise, au lever du jour, quand une drôle de petite voice m’a réveillé. Elle disait : "S’il vous plaît… dessine-moi un mouton !"`;
+
+const rilkeS1 = `Da stieg ein Baum. O reine Übersteigung!
+O Orpheus singt! O hoher Baum im Ohr!
+Und alles schwieg. Doch selbst in der Verschweigung
+ging neuer Anfang, Wink und Wandlung vor.`;
+
+const rilkeS2 = `Und fast ein Mädchen wars und ging hervor
+aus diesem einigen Glück von Sang und Saiten
+und glänzte klar durch ihre Frühlingsschleier
+und machte sich ein Bett in meinem Ohr.`;
 
 export const MOCK_BOOKS: Book[] = [
-  createBook('1', 'Is a Museum a Factory?', 'Hito Steyerl', text1, 15),
-  createBook('2', 'Illuminations', 'Walter Benjamin', text2, 0),
-  createBook('3', 'Ways of Seeing', 'John Berger', text1, 0), // Placeholder content
-  createBook('4', 'Society of the Spectacle', 'Guy Debord', text1, 0),
+  {
+    id: 'pp-fr',
+    title: 'Le Petit Prince',
+    author: 'Antoine de Saint-Exupéry',
+    language: 'French',
+    progress: 15,
+    chapters: [
+      { id: 'pp-c1', number: 1, title: 'Chapitre I', subtitle: 'Le boa et l’éléphant', content: parseChapterContent(ppCh1, 'pp', 1) },
+      { id: 'pp-c2', number: 2, title: 'Chapitre II', subtitle: 'Le mouton au désert', content: parseChapterContent(ppCh2, 'pp', 2) }
+    ]
+  },
+  {
+    id: 'rilke-de',
+    title: 'Die Sonette an Orpheus',
+    author: 'Rainer Maria Rilke',
+    language: 'German',
+    progress: 8,
+    chapters: [
+      { id: 'rilke-c1', number: 1, title: 'Sonett I', content: parseChapterContent(rilkeS1, 'rilke', 1).map(p => ({...p, type: 'poetry'})) },
+      { id: 'rilke-c2', number: 2, title: 'Sonett II', content: parseChapterContent(rilkeS2, 'rilke', 2).map(p => ({...p, type: 'poetry'})) }
+    ]
+  }
 ];
 
 export const MOCK_PROJECT: Project = {
   id: 'p1',
-  name: 'Critical Theory & Visual Culture',
-  description: 'Exploring the intersection of labor, aesthetics, and the institution.',
+  name: 'European Literature & Existentialism',
+  description: 'A study of innocence and poetic transformation.',
   books: MOCK_BOOKS,
-  activeBookId: '1',
-  vocabularyStats: {} // Initial empty state
+  vocabularyStats: {}
 };
