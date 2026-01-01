@@ -20,7 +20,7 @@ const App: React.FC = () => {
 
   const [activeProject, setActiveProject] = useState<Project>(MOCK_PROJECT);
   const [activeBook, setActiveBook] = useState<Book | undefined>(MOCK_PROJECT.books[0]);
-  const [readingProgress, setReadingProgress] = useState(0.15); // 模拟阅读进度
+  const [readingProgress, setReadingProgress] = useState(0.15); 
   
   const [projectMessages, setProjectMessages] = useState<AgentMessage[]>([]);
   const [projectInput, setProjectInput] = useState("");
@@ -31,9 +31,7 @@ const App: React.FC = () => {
   const [focusedSentenceId, setFocusedSentenceId] = useState<string | null>(null);
   const [activeToken, setActiveToken] = useState<WordOccurrence | null>(null);
 
-  const sentenceRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-
-  // --- IMS: 计算词汇在文本中的发现时机 ---
+  // --- 词汇数据分析逻辑 ---
   const terrainAnalysis = useMemo(() => {
     const stats: Record<string, { count: number, firstPos: number }> = {};
     let totalTokensInBook = 0;
@@ -103,6 +101,70 @@ const App: React.FC = () => {
     });
   };
 
+  // --- 修复交互：点击句子，清除词汇激活 ---
+  const handleSentenceClick = async (sentence: Sentence) => {
+    if (isZenMode) return;
+    setFocusedSentenceId(sentence.id);
+    setActiveToken(null); // 重要：点击句子层级时，清除词汇层级的激活
+    
+    sentence.tokens.forEach(t => recordInteraction(t.lemma, 'implicit', 0.05, t.id));
+
+    const context: AnnotationContext = {
+      targetSentence: sentence.text,
+      surroundingContext: sentence.text,
+      bookTitle: activeBook?.title || "",
+      author: activeBook?.author || "",
+      language: activeBook?.language || "",
+      projectName: activeProject.name,
+      projectDescription: activeProject.description,
+      proficiency: userProficiency || UserProficiency.Intermediate,
+      targetMastery: 0.5,
+      isFocusedLookup: false
+    };
+
+    setIsAiLoading(true);
+    setMessages([{ id: Date.now().toString(), role: 'user', content: `解构此句: ${sentence.text}`, type: 'annotation' }]);
+    const agentMsgId = (Date.now() + 1).toString();
+    setMessages(prev => [...prev, { id: agentMsgId, role: 'agent', content: '', type: 'annotation' }]);
+    
+    await streamAnnotation(context, "深度解读该句子的修辞与语境", (text) => {
+      setMessages(prev => prev.map(m => m.id === agentMsgId ? { ...m, content: text } : m));
+    });
+    setIsAiLoading(false);
+  };
+
+  // --- 修复交互：点击词汇，同步更新句子聚焦指针 ---
+  const handleTokenClick = async (token: WordOccurrence, sentenceId: string) => {
+    if (isZenMode) return;
+    setActiveToken(token);
+    setFocusedSentenceId(sentenceId); // 重要：确保阅读指针（句子高亮）同步到词汇所在句
+    
+    recordInteraction(token.lemma, 'explicit', -0.1, token.id);
+
+    const context: AnnotationContext = {
+      targetSentence: token.text,
+      surroundingContext: token.text,
+      bookTitle: activeBook?.title || "",
+      author: activeBook?.author || "",
+      language: activeBook?.language || "",
+      projectName: activeProject.name,
+      projectDescription: activeProject.description,
+      proficiency: userProficiency || UserProficiency.Intermediate,
+      targetMastery: activeProject.vocabularyStats[token.lemma]?.masteryScore || 0,
+      isFocusedLookup: true
+    };
+
+    setIsAiLoading(true);
+    setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', content: `解析词汇: ${token.text}`, type: 'annotation' }]);
+    const agentMsgId = (Date.now() + 1).toString();
+    setMessages(prev => [...prev, { id: agentMsgId, role: 'agent', content: '', type: 'annotation' }]);
+    
+    await streamAnnotation(context, `详细解析 "${token.text}" 在此处语境下的精确含义及用法`, (text) => {
+      setMessages(prev => prev.map(m => m.id === agentMsgId ? { ...m, content: text } : m));
+    });
+    setIsAiLoading(false);
+  };
+
   const projectLexicon = useMemo(() => {
     const allLemmas = Object.keys(terrainAnalysis.stats);
     return allLemmas.map(lemma => {
@@ -146,16 +208,19 @@ const App: React.FC = () => {
         side="left" state={leftPanelState} onStateChange={setLeftPanelState} title="Focus"
         headerContent={<div className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-500">Cognitive Hub</div>}
         expandedContent={
-          <div className="h-full flex flex-col overflow-hidden pb-12">
+          <div className="h-full flex flex-col overflow-hidden pb-16">
              <div className="flex justify-between items-center mb-10">
                 <nav className="flex items-center gap-10">
                    <button onClick={() => setFocusView('project')} className={`text-4xl font-display transition-all ${focusView === 'project' ? 'text-ink' : 'text-ink/10 hover:text-ink/30'}`}>Project</button>
                    <button onClick={() => setFocusView('lexis')} className={`text-4xl font-display transition-all ${focusView === 'lexis' ? 'text-ink' : 'text-ink/10 hover:text-ink/30'}`}>Terrain</button>
                 </nav>
+                <button onClick={() => setLeftPanelState('default')} className="p-3 hover:bg-black/5 rounded-full transition-colors" title="Close Focus">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-ink/30 hover:text-ink"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
              </div>
              
              {focusView === 'project' ? (
-               <div className="flex-1 flex gap-12 overflow-hidden animate-fade-in mb-8">
+               <div className="flex-1 flex gap-12 overflow-hidden animate-fade-in mb-4">
                  <div className="w-80 flex flex-col gap-10">
                     <div className="bg-surface p-8 rounded-[2rem] border border-black/5">
                        <h3 className="font-display text-2xl text-ink mb-3">{activeProject.name}</h3>
@@ -202,7 +267,7 @@ const App: React.FC = () => {
                  </div>
                </div>
              ) : (
-               <div className="flex-1 flex flex-col mb-8 overflow-hidden">
+               <div className="flex-1 flex flex-col mb-4 overflow-hidden">
                 <LexisDeck 
                   lexicon={projectLexicon} 
                   bookProgress={readingProgress}
@@ -216,7 +281,7 @@ const App: React.FC = () => {
           </div>
         }
       >
-        <div className="p-6 space-y-8 h-full">
+        <div className="p-6 space-y-8 h-full pb-20">
            <ProjectContext project={activeProject} activeBookId={activeBook?.id} onBookSelect={setActiveBook} />
         </div>
       </LayoutShell>
@@ -237,10 +302,7 @@ const App: React.FC = () => {
                     {paragraph.sentences.map((sentence) => (
                       <div 
                         key={sentence.id} 
-                        onClick={() => {
-                          setFocusedSentenceId(sentence.id);
-                          sentence.tokens.forEach(t => recordInteraction(t.lemma, 'implicit', 0.05, t.id));
-                        }} 
+                        onClick={() => handleSentenceClick(sentence)} 
                         className={`transition-all duration-500 cursor-pointer ${paragraph.type === 'prose' ? 'inline' : 'block mb-4'} ${focusedSentenceId === sentence.id ? 'bg-accent/5 ring-1 ring-accent/10 rounded-lg px-2 -mx-2 py-0.5' : ''}`}
                       >
                         <p className="text-xl leading-[2.4] font-serif text-ink inline">
@@ -250,10 +312,7 @@ const App: React.FC = () => {
                                  token={{...token, masteryScore: activeProject.vocabularyStats[token.lemma]?.masteryScore || 0}} 
                                  isActive={activeToken?.id === token.id} 
                                  isSentenceFocused={focusedSentenceId === sentence.id} 
-                                 onClick={() => {
-                                   setActiveToken(token);
-                                   recordInteraction(token.lemma, 'explicit', -0.2, token.id);
-                                 }} 
+                                 onClick={() => handleTokenClick(token, sentence.id)} 
                                  isZenMode={isZenMode} 
                                />
                                {idx < sentence.tokens.length - 1 && <span className="select-none text-ink/20"> </span>}
@@ -272,7 +331,7 @@ const App: React.FC = () => {
       </main>
 
       <LayoutShell side="right" state={rightPanelState} onStateChange={setRightPanelState} title="Margin">
-        <div className="h-full px-6">
+        <div className="h-full px-6 pb-20">
            <MarginSidebar messages={messages} isLoading={isAiLoading} proficiency={userProficiency || UserProficiency.Intermediate} />
         </div>
       </LayoutShell>

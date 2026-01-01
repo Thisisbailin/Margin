@@ -28,9 +28,9 @@ const LexisDeck: React.FC<LexisDeckProps> = ({
   // --- 核心地形逻辑 ---
   const landscapeData = useMemo(() => {
     const total = lexicon.length;
-    // 按首次发现进度排序，用于内容曲线
+    // 按首次发现进度排序，用于内容曲线 (X=进度, Y=累积百分比)
     const sortedByDiscovery = [...lexicon].sort((a, b) => a.firstDiscoveryProgress - b.firstDiscoveryProgress);
-    // 按频次排序，用于散点图 X 轴
+    // 按频次排序，用于散点图 (X=频次排行)
     const sortedByFrequency = [...lexicon].sort((a, b) => b.count - a.count);
 
     // 1. 生成攀登曲线路径点 (仅用于 Content View)
@@ -51,13 +51,13 @@ const LexisDeck: React.FC<LexisDeckProps> = ({
       let opacity = 0.2;
 
       if (view === 'content') {
-        // 内容视角：X 为书本进度，Y 为累积发现进度
+        // 内容视角：X 为书本发现进度，Y 为累积唯一词数百分比
         x = item.firstDiscoveryProgress * 100;
         y = ((discoveryIndex + 1) / total) * 100;
         opacity = isDiscovered ? 0.9 : 0.15;
         color = 'fill-accent';
       } else {
-        // 记忆或复合视角：恢复散点图 (X 为频次排行，Y 为掌握度)
+        // 记忆或复合视角：恢复散点设计 (X 为频次排行，Y 为掌握得分)
         x = (freqIndex / total) * 100;
         y = (item.masteryScore || 0) * 100;
         
@@ -65,7 +65,7 @@ const LexisDeck: React.FC<LexisDeckProps> = ({
           opacity = (item.masteryScore || 0) * 0.9 + 0.1;
           color = 'fill-secondary';
         } else {
-          // 复合现实视角：散点布局 + 发现状态过滤
+          // 复合现实视角 (Reality Map)
           opacity = isDiscovered ? 0.9 : 0.05;
           color = item.masteryScore > 0.7 ? 'fill-secondary' : isDiscovered ? 'fill-accent' : 'fill-ink/10';
         }
@@ -79,7 +79,7 @@ const LexisDeck: React.FC<LexisDeckProps> = ({
       };
     });
 
-    // 3. 统计分区 (始终基于频次分布，因为分区是按词汇表重要程度划分的)
+    // 3. 统计分区 (始终基于频次分布，反映词汇表的结构化层级)
     const filterByFreq = (minR: number, maxR: number) => particles.filter(p => p.freqRank >= minR && p.freqRank < maxR);
     const zones = {
       core: filterByFreq(0, 25),
@@ -131,7 +131,7 @@ const LexisDeck: React.FC<LexisDeckProps> = ({
   }
 
   return (
-    <div className="h-full flex gap-12 overflow-hidden">
+    <div className="h-full flex gap-12 overflow-hidden pb-8">
       {/* 1. 地形主场 */}
       <div className="flex-[3] flex flex-col min-w-0">
         <div className="flex justify-between items-end mb-12">
@@ -145,13 +145,13 @@ const LexisDeck: React.FC<LexisDeckProps> = ({
                  ))}
               </div>
               <h3 className="text-5xl font-display text-ink tracking-tight">
-                {view === 'content' ? 'Reading Trajectory' : 'Mastery Topography'}
+                {view === 'content' ? 'Climbing Trajectory' : 'Linguistic Landscape'}
               </h3>
            </div>
            
            <div className="w-72 text-right">
               <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">
-                 <span>Reading Journey</span>
+                 <span>Simulated Journey</span>
                  <span className="text-accent">{Math.round(simulatedProgress * 100)}%</span>
               </div>
               <div className="relative h-1 bg-gray-100 rounded-full cursor-pointer group">
@@ -162,16 +162,17 @@ const LexisDeck: React.FC<LexisDeckProps> = ({
            </div>
         </div>
 
+        {/* SVG 地形场 */}
         <div className="flex-1 bg-white/40 rounded-[3.5rem] border border-black/5 relative overflow-hidden group">
            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full p-20 overflow-visible">
               <defs>
                  <linearGradient id="curveGradient" x1="0%" y1="100%" x2="0%" y2="0%">
                     <stop offset="0%" stopColor="rgba(194,142,91,0.02)" />
-                    <stop offset="100%" stopColor="rgba(194,142,91,0.2)" />
+                    <stop offset="100%" stopColor="rgba(194,142,91,0.15)" />
                  </linearGradient>
               </defs>
 
-              {/* 网格线 */}
+              {/* 背景网格 */}
               {[25, 50, 75].map(p => (
                 <line key={p} x1={p} y1="0" x2={p} y2="100" stroke="rgba(0,0,0,0.02)" strokeWidth="0.2" />
               ))}
@@ -179,52 +180,56 @@ const LexisDeck: React.FC<LexisDeckProps> = ({
                 <line key={p} x1="0" y1={p} x2="100" y2={p} stroke="rgba(0,0,0,0.02)" strokeWidth="0.2" />
               ))}
 
-              {/* 仅内容视角：绘制 CDF 曲线 */}
+              {/* 仅内容视图绘制累积路径 */}
               {view === 'content' && (
                 <path d={`${curvePath} L 100,100 L 0,100 Z`} fill="url(#curveGradient)" className="transition-all duration-1000" />
               )}
 
-              {/* 仅内容视角：垂直进度线 */}
+              {/* 仅内容视图绘制阅读进度指示器 */}
               {view === 'content' && (
-                <line x1={simulatedProgress * 100} y1="0" x2={simulatedProgress * 100} y2="100" stroke="rgba(194,142,91,0.4)" strokeWidth="0.3" strokeDasharray="1,1" />
+                <line x1={simulatedProgress * 100} y1="0" x2={simulatedProgress * 100} y2="100" stroke="rgba(194,142,91,0.3)" strokeWidth="0.4" strokeDasharray="1,1" />
               )}
 
-              {/* 词汇粒子 */}
+              {/* 词汇粒子映射 */}
               {landscapeData.particles.map((d) => (
                 <circle 
                   key={d.lemma} cx={d.x} cy={100 - d.y} r={d.size / 6} 
-                  className={`transition-all duration-1000 cursor-pointer ${d.color} ${selectedZone && !activeZoneWords.includes(d) ? 'opacity-0 blur-md' : ''}`}
+                  className={`transition-all duration-1000 cursor-pointer ${d.color} ${selectedZone && !activeZoneWords.includes(d) ? 'opacity-0 blur-xl' : ''}`}
                   style={{ opacity: d.opacity }}
-                />
+                >
+                  <title>{d.lemma}</title>
+                </circle>
               ))}
 
-              {/* 坐标说明 */}
+              {/* 说明文本 */}
               <text x="0" y="105%" className="text-[1.8px] fill-gray-300 font-bold uppercase tracking-[0.2em]">
-                {view === 'content' ? 'Book Start' : 'High Frequency'}
+                {view === 'content' ? 'Intro' : 'Core'}
               </text>
               <text x="90" y="105%" className="text-[1.8px] fill-gray-300 font-bold uppercase tracking-[0.2em]">
-                {view === 'content' ? 'End' : 'Niche'}
+                {view === 'content' ? 'Outro' : 'Long Tail'}
               </text>
               <text x="-5" y="5" transform="rotate(-90, -5, 5)" className="text-[1.8px] fill-gray-300 font-bold uppercase tracking-[0.2em]">
-                {view === 'content' ? 'Cumulative Volume' : 'Mastery'}
+                {view === 'content' ? 'Accumulated Lexis' : 'Mastery'}
               </text>
            </svg>
            
-           <div className="absolute top-10 right-10 bg-white/80 backdrop-blur-md p-6 rounded-2xl border border-black/5 shadow-soft pointer-events-none">
+           {/* 浮动统计组件 */}
+           <div className="absolute top-10 right-10 bg-white/70 backdrop-blur-md p-6 rounded-2xl border border-black/5 shadow-soft pointer-events-none">
               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                {view === 'content' ? 'Climbing Index' : 'Consolidation State'}
+                {view === 'content' ? 'Climbing Index' : 'Neural Consolidation'}
               </div>
               <div className="text-3xl font-display text-ink">
-                {view === 'content' ? 'Steep' : 'Floating'}
+                {view === 'content' ? 'Steep' : 'Merging'}
               </div>
               <div className="mt-3 space-y-1">
-                 <div className="flex justify-between text-[9px] gap-8">
-                    <span className="text-gray-400">Unique Tokens</span>
-                    <span className="font-bold">{lexicon.length}</span>
+                 <div className="flex justify-between text-[9px] gap-10">
+                    <span className="text-gray-400">Inventory</span>
+                    <span className="font-bold">{lexicon.length} tokens</span>
                  </div>
                  <div className="flex justify-between text-[9px]">
-                    <span className="text-gray-400">Avg. Mastery</span>
-                    <span className="font-bold">{Math.round((lexicon.reduce((acc, l) => acc + (l.masteryScore || 0), 0) / lexicon.length) * 100)}%</span>
+                    <span className="text-gray-400">Discovery Rate</span>
+                    {/* Fixed "total" reference error by using lexicon.length directly since total was only in useMemo scope */}
+                    <span className="font-bold">{Math.round((landscapeData.particles.filter(p => p.isDiscovered).length / (lexicon.length || 1)) * 100)}%</span>
                  </div>
               </div>
            </div>
@@ -232,24 +237,24 @@ const LexisDeck: React.FC<LexisDeckProps> = ({
       </div>
 
       {/* 2. 探索注册表 */}
-      <div className="flex-1 flex flex-col gap-6 w-[420px] pb-8">
+      <div className="flex-1 flex flex-col gap-6 w-[420px] pb-4">
          <div className="space-y-4">
             <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400 ml-1">Topographical Segments</label>
             <div className="grid grid-cols-1 gap-3">
                {[
-                 { id: 'core', label: 'Basal Plains', desc: '文本基石，极高频词汇', count: landscapeData.zones.core.length },
-                 { id: 'slopes', label: 'Narrative Slopes', desc: '叙事骨干，中频常用表达', count: landscapeData.zones.slopes.length },
-                 { id: 'canyons', label: 'Niche Summits', desc: '文学之眼，低频生僻修辞', count: landscapeData.zones.canyons.length }
+                 { id: 'core', label: 'Basal Plains', desc: '文本基础，出现最为频繁的词簇', count: landscapeData.zones.core.length },
+                 { id: 'slopes', label: 'Narrative Slopes', desc: '叙事骨架，支撑语境的核心表达', count: landscapeData.zones.slopes.length },
+                 { id: 'canyons', label: 'Niche Summits', desc: '文学巅峰，体现风格的珍稀词汇', count: landscapeData.zones.canyons.length }
                ].map(r => (
                  <button 
                   key={r.id} 
                   onClick={() => setSelectedZone(selectedZone === r.id ? null : r.id)}
-                  className={`p-6 rounded-[2rem] border text-left transition-all group relative overflow-hidden ${selectedZone === r.id ? 'border-accent bg-white shadow-float scale-[1.02]' : 'border-black/5 bg-surface/50 hover:bg-white'}`}
+                  className={`p-6 rounded-[2rem] border text-left transition-all group relative overflow-hidden ${selectedZone === r.id ? 'border-accent bg-white shadow-float scale-[1.02]' : 'border-black/5 bg-surface/40 hover:bg-white'}`}
                  >
                     <div className="flex justify-between items-center relative z-10">
                        <div>
                           <span className="font-display text-2xl text-ink group-hover:text-accent transition-colors">{r.label}</span>
-                          <p className="text-[9px] text-gray-400 mt-1 uppercase tracking-wider">{r.desc}</p>
+                          <p className="text-[9px] text-gray-400 mt-1 uppercase tracking-wider leading-relaxed">{r.desc}</p>
                        </div>
                        <div className="text-right">
                           <span className="text-lg font-display text-ink/30">{r.count}</span>
@@ -263,19 +268,19 @@ const LexisDeck: React.FC<LexisDeckProps> = ({
 
          {selectedZone ? (
            <div className="flex-1 flex flex-col bg-white border border-black/5 rounded-[3rem] overflow-hidden animate-fade-in-up shadow-float">
-              <div className="p-8 border-b border-black/5 flex justify-between items-center bg-paper/20">
+              <div className="p-8 border-b border-black/5 flex justify-between items-center bg-paper/10">
                  <div>
                     <h4 className="font-display text-2xl capitalize text-ink">{selectedZone} Registry</h4>
-                    <p className="text-[9px] text-gray-400 uppercase tracking-widest mt-1">Lexical Reinforcement</p>
+                    <p className="text-[9px] text-gray-400 uppercase tracking-widest mt-1">Lexical Consolidation</p>
                  </div>
-                 <button onClick={() => startStudy(activeZoneWords)} className="px-6 py-2.5 bg-ink text-white rounded-full font-bold uppercase tracking-widest text-[10px] hover:bg-accent transition-all active:scale-95 shadow-lg">Study All</button>
+                 <button onClick={() => startStudy(activeZoneWords)} className="px-6 py-2.5 bg-ink text-white rounded-full font-bold uppercase tracking-widest text-[10px] hover:bg-accent transition-all shadow-lg active:scale-95">Study Segment</button>
               </div>
               <div className="flex-1 overflow-y-auto p-6 space-y-2 no-scrollbar">
                  {activeZoneWords.sort((a:any, b:any) => b.count - a.count).map((word: any) => (
                    <div key={word.lemma} className="flex items-center justify-between p-4 hover:bg-accent/5 rounded-[1.5rem] group transition-all">
                       <div className="flex items-baseline gap-3">
                          <div className="text-lg font-serif text-ink">{word.lemma}</div>
-                         <div className="text-[9px] text-gray-400 uppercase font-bold tracking-tighter">{word.count}x</div>
+                         <div className="text-[9px] text-gray-400 uppercase font-bold tracking-tighter">{word.count} occ.</div>
                       </div>
                       <div className="flex items-center gap-4">
                          <div className="w-16 h-1 bg-gray-100 rounded-full overflow-hidden">
@@ -287,8 +292,11 @@ const LexisDeck: React.FC<LexisDeckProps> = ({
               </div>
            </div>
          ) : (
-           <div className="flex-1 bg-surface/30 p-12 rounded-[3rem] border border-black/5 border-dashed flex flex-col justify-center items-center text-center opacity-40">
-              <p className="text-xs font-serif text-gray-500 leading-relaxed italic max-w-[200px]">Select a topographical segment to inspect details.</p>
+           <div className="flex-1 bg-surface/20 p-12 rounded-[3rem] border border-black/5 border-dashed flex flex-col justify-center items-center text-center opacity-30">
+              <div className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center mb-4">
+                <span className="text-xs font-display">§</span>
+              </div>
+              <p className="text-xs font-serif text-gray-500 leading-relaxed italic max-w-[200px]">Choose a zone above to begin detailed exploration.</p>
            </div>
          )}
       </div>
