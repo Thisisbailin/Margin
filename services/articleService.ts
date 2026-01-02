@@ -1,29 +1,59 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Chapter, Paragraph, MaterialType, Book } from "../types";
+import { Chapter, Paragraph, MaterialType } from "../types";
+
+/**
+ * 核心逻辑：尝试抓取网页内容
+ * 由于 CORS 限制，生产环境通常需要通过 Cloudflare Worker Proxy。
+ * 在此演示中，我们尝试直接获取，并提供友好的失败反馈。
+ */
+const fetchUrlContent = async (url: string): Promise<string> => {
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'text/html,application/xhtml+xml,application/xml'
+      },
+      // 注意：由于浏览器安全策略，许多站点会拒绝跨域 fetch。
+      // 在本地开发或有代理的情况下可工作。
+    });
+    
+    if (!response.ok) throw new Error(`Status ${response.status}`);
+    return await response.text();
+  } catch (error) {
+    console.error("Fetch failed, requesting fallback to manual paste.", error);
+    throw new Error("Could not access the URL directly due to CORS or site restrictions. Please copy and paste the article text manually.");
+  }
+};
 
 /**
  * 使用 Gemini 3 Flash 进行智能内容提取与结构化转换
- * 它会将原始网页文本清洗并转换为我们的 Chapter 格式
  */
-export const ingestArticleContent = async (rawText: string, titleHint: string): Promise<Chapter> => {
-  // CRITICAL: Always create a new instance right before the call
+export const ingestArticleContent = async (input: string, titleHint: string, isUrl: boolean): Promise<Chapter> => {
+  let contentToAnalyze = input;
+
+  if (isUrl) {
+    contentToAnalyze = await fetchUrlContent(input);
+  }
+
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const model = 'gemini-3-flash-preview';
   
   const prompt = `
-    你是一个专业的内容摄入引擎。你的任务是将以下从网页抓取的杂乱文本转换为结构化的阅读素材。
+    你是一个专业的内容结构化专家。你收到了以下${isUrl ? 'HTML 源代码' : '原始文本'}。
     
-    任务要求：
-    1. 剔除所有与正文无关的内容（如广告、导航、社交分享、版权声明）。
-    2. 将正文拆分为段落（Paragraph）。
-    3. 将每个段落进一步拆分为句子（Sentence）。
-    4. 识别段落类型：'prose' (散文), 'poetry' (诗歌), 或 'dialogue' (对话)。
-    5. 仅提取核心正文。
+    你的任务：
+    1. 提取文章的【标题】(Title) 和 【作者】(Author)。
+    2. 提取核心正文内容。请剔除侧边栏、导航栏、底部版权、广告等噪音。
+    3. 如果内容是诗歌，请保留每一行（作为单独的句子）并标记段落类型为 'poetry'。
+    4. 如果内容包含对话，请识别并标记为 'dialogue'。
+    5. 常规文章请标记为 'prose'。
+    6. 将内容拆分为段落(paragraphs)，每个段落拆分为句子(sentences)。
 
-    文章标题参考：${titleHint}
-    原始文本：
-    ${rawText.substring(0, 15000)} // 截断以防超出 token 限制
+    参考标题/来源: ${titleHint} ${isUrl ? `(URL: ${input})` : ''}
+    
+    待处理内容（截断至 20000 字符）:
+    ${contentToAnalyze.substring(0, 20000)}
   `;
 
   const response = await ai.models.generateContent({
@@ -35,6 +65,7 @@ export const ingestArticleContent = async (rawText: string, titleHint: string): 
         type: Type.OBJECT,
         properties: {
           title: { type: Type.STRING },
+          author: { type: Type.STRING },
           paragraphs: {
             type: Type.ARRAY,
             items: {
@@ -55,15 +86,19 @@ export const ingestArticleContent = async (rawText: string, titleHint: string): 
     }
   });
 
-  const data = JSON.parse(response.text);
+  const data = JSON.parse(response.text || '{}');
   
-  // 将 API 返回的扁平数据转化为我们内部的 Paragraph/Sentence 对象（包含 Token 逻辑）
+  if (!data.paragraphs || data.paragraphs.length === 0) {
+    throw new Error("Failed to extract meaningful paragraphs from the source.");
+  }
+
   const processedParagraphs: Paragraph[] = data.paragraphs.map((p: any, pIdx: number) => {
     return {
       id: `ingested-p-${pIdx}-${Date.now()}`,
-      type: p.type as any,
+      type: (p.type === 'poetry' || p.type === 'dialogue') ? p.type : 'prose',
       sentences: p.sentences.map((sText: string, sIdx: number) => {
-        const words = sText.trim().split(/\s+/);
+        // 词汇化处理
+        const words = sText.trim().split(/\s+/).filter(w => w.length > 0);
         return {
           id: `ingested-s-${pIdx}-${sIdx}-${Date.now()}`,
           text: sText,
@@ -72,7 +107,7 @@ export const ingestArticleContent = async (rawText: string, titleHint: string): 
             text: w,
             lemma: w.replace(/[.,!?;:«»"()]/g, '').toLowerCase(),
             pos: 'unknown',
-            masteryScore: 0 // 初始掌握度为 0
+            masteryScore: 0
           }))
         };
       })
@@ -83,6 +118,7 @@ export const ingestArticleContent = async (rawText: string, titleHint: string): 
     id: `ch-ingested-${Date.now()}`,
     number: 1,
     title: data.title || titleHint,
+    subtitle: data.author ? `by ${data.author}` : undefined,
     content: processedParagraphs
   };
 };

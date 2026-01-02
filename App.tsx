@@ -72,18 +72,24 @@ const App: React.FC = () => {
     return { stats, totalTokensInBook };
   }, [activeProject.books]);
 
-  const handleImportArticle = async (rawText: string, title: string) => {
-    const chapter = await ingestArticleContent(rawText, title);
+  const handleImportArticle = async (input: string, title: string, isUrl: boolean) => {
+    const chapter = await ingestArticleContent(input, title, isUrl);
+    
+    // Calculate word count approximately
+    let wordCount = 0;
+    chapter.content.forEach(p => p.sentences.forEach(s => wordCount += s.tokens.length));
+
     const newArticle: Book = {
       id: `article-${Date.now()}`,
       type: MaterialType.Article,
       title: chapter.title,
-      author: 'Ingested Content',
+      author: chapter.subtitle?.replace(/^by\s+/i, '') || 'Acquired Content',
       language: 'English',
       progress: 0,
       chapters: [chapter],
-      wordCount: rawText.split(/\s+/).length,
-      readingTime: Math.ceil(rawText.split(/\s+/).length / 200)
+      wordCount: wordCount,
+      readingTime: Math.max(1, Math.ceil(wordCount / 200)),
+      sourceUrl: isUrl ? input : undefined
     };
 
     setActiveProject(prev => ({
@@ -133,7 +139,6 @@ const App: React.FC = () => {
     setFocusedSentenceId(sentence.id);
     setActiveToken(null); 
     
-    // 朗读原文
     speakText(sentence.text, 'Kore');
 
     const context: AnnotationContext = {
@@ -162,7 +167,6 @@ const App: React.FC = () => {
     setActiveToken(token);
     setFocusedSentenceId(sentenceId); 
     
-    // 朗读单词原文
     speakText(token.text, 'Kore');
 
     setIsAiLoading(true);
@@ -318,7 +322,6 @@ const App: React.FC = () => {
             projectLexicon={projectLexicon} readingProgress={readingProgress}
             recordInteraction={recordInteraction} generateWordDefinition={generateWordDefinition}
             onClose={() => setRightPanelState('default')}
-            // Pass the import click handler to FocusModule
             onImportClick={() => setIsImportOpen(true)}
           />
         }
@@ -327,7 +330,7 @@ const App: React.FC = () => {
             <span className="font-display text-2xl italic text-ink tracking-tight">Margin</span>
             <div className="flex items-center gap-6">
               <button onClick={() => setLeftPanelState(leftPanelState === 'collapsed' ? 'default' : 'collapsed')} className={`transition-all ${leftPanelState !== 'collapsed' ? 'text-accent' : 'text-faded hover:text-ink'}`} title="Project Landscape">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18c-2.305 0-4.408.867-6 2.292m0-14.25v14.25" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0018 18c-2.305 0-4.408.867-6 2.292m0-14.25v14.25" /></svg>
               </button>
               <button onClick={() => setIsZenMode(!isZenMode)} className={`transition-all ${isZenMode ? 'text-accent' : 'text-faded hover:text-ink'}`} title="Zen Mode">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
