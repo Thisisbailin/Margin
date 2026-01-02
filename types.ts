@@ -1,5 +1,5 @@
 
-// Domain Types for Margin - Linguistic Landscape Edition
+// Domain Types for Margin - Material Evolution Edition
 
 export enum UserProficiency {
   Beginner = 'beginner',
@@ -14,12 +14,20 @@ export enum Familiarity {
   Mastered = 3
 }
 
+export enum MaterialType {
+  Book = 'book',
+  Article = 'article'
+}
+
 export type PanelState = 'collapsed' | 'default' | 'expanded';
 export type TopographyView = 'content' | 'memory' | 'reality';
 
-/**
- * 记忆交互记录：区分隐性与显性
- */
+export interface ModelConfig {
+  lexical: string;   
+  contextual: string; 
+  synthesis: string;  
+}
+
 export interface MemoryInteraction {
   timestamp: number;
   occurrenceId: string;
@@ -27,25 +35,18 @@ export interface MemoryInteraction {
   weight: number; 
 }
 
-/**
- * 词汇统计：IMS + VMS 双驱动
- */
 export interface VocabularyStat {
   lemma: string;
   totalOccurrences: number; 
   relativeDifficulty: number; 
-  firstDiscoveryProgress: number; // 0.0 - 1.0 单词在书中首次出现的进度位置
-
-  // 记忆分解
+  firstDiscoveryProgress: number; 
   masteryScore: number;    
   implicitScore: number;   
   explicitScore: number;   
-  
   familiarity: Familiarity; 
   reviewCount: number;     
   interactions: MemoryInteraction[];
-  
-  definition?: string;
+  definition?: string; 
   lastEncounterDate: number;
 }
 
@@ -53,7 +54,7 @@ export interface LandscapeStats {
   uniqueTokens: number;
   totalTokens: number;
   ttr: number; 
-  difficultyScore: number; // 综合难度评价
+  difficultyScore: number; 
 }
 
 export interface WordOccurrence {
@@ -86,12 +87,17 @@ export interface Chapter {
 
 export interface Book {
   id: string;
+  type: MaterialType; // 新增：区分书籍与文章
   title: string;
   author: string;
   language: string;
   chapters: Chapter[]; 
-  progress: number; // 当前真实阅读进度
+  progress: number; 
   landscape?: LandscapeStats; 
+  // 生产环境元数据预留
+  wordCount?: number;
+  readingTime?: number; // 分钟
+  sourceUrl?: string;
 }
 
 export interface Project {
@@ -107,6 +113,7 @@ export interface AgentMessage {
   role: 'user' | 'agent' | 'system';
   content: string;
   type: 'annotation' | 'chat' | 'advice';
+  quickDefinition?: string;
 }
 
 export interface AnnotationContext {
@@ -125,10 +132,4 @@ export interface AnnotationContext {
 export interface LexiconItem extends VocabularyStat {
   count: number; 
   occurrences: any[];
-}
-
-export interface AssessmentWord {
-  word: string;
-  difficulty: 'easy' | 'medium' | 'hard';
-  context: string;
 }
