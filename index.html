@@ -58,33 +58,12 @@
         color: #262626;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-        font-size: 0.95rem; /* Slightly smaller base font */
+        font-size: 0.95rem;
       }
-      .no-scrollbar::-webkit-scrollbar {
-        display: none;
-      }
-      .no-scrollbar {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-      }
-      .prose p {
-        margin-top: 0.4em;
-        margin-bottom: 0.4em;
-        line-height: 1.6;
-      }
-      .prose strong {
-        color: #C28E5B;
-        font-weight: 600;
-      }
-      .prose ul {
-        margin-top: 0.4em;
-        margin-bottom: 0.4em;
-        padding-left: 1.2em;
-      }
-      .prose li {
-        margin-top: 0.2em;
-        margin-bottom: 0.2em;
-      }
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      .prose p { margin-top: 0.4em; margin-bottom: 0.4em; line-height: 1.6; }
+      .cl-rootBox { font-family: 'Inter', sans-serif !important; }
     </style>
   <script type="importmap">
 {
@@ -93,7 +72,10 @@
     "react": "https://esm.sh/react@^19.2.3",
     "react/": "https://esm.sh/react@^19.2.3/",
     "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-    "react-markdown": "https://esm.sh/react-markdown@9.0.1?bundle"
+    "react-markdown": "https://esm.sh/react-markdown@9.0.1?bundle",
+    "jszip": "https://esm.sh/jszip@^3.10.1",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.45.0",
+    "@clerk/clerk-react": "https://esm.sh/@clerk/clerk-react@^5.0.0"
   }
 }
 </script>

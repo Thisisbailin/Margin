@@ -1,23 +1,55 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { parseEpubFile } from '../services/epubService';
 
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImport: (content: string, title: string, isUrl: boolean) => Promise<void>;
+  onImport: (content: string, title: string, isUrl: boolean, epubData?: any, originalFile?: File) => Promise<void>;
 }
 
 const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) => {
-  const [importType, setImportType] = useState<'url' | 'text'>('url');
+  const [importType, setImportType] = useState<'url' | 'text' | 'file'>('url');
   const [url, setUrl] = useState('');
   const [text, setText] = useState('');
   const [title, setTitle] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.epub')) {
+      alert("Please upload a valid .epub file.");
+      return;
+    }
+
+    setIsProcessing(true);
+    setStatusMessage('Decompressing EPUB...');
+    try {
+      const epubData = await parseEpubFile(file);
+      setStatusMessage('Storing & Structuring...');
+      // 关键修改：同时传递 epubData (文本数据) 和 originalFile (二进制文件)
+      await onImport("", epubData.title, false, epubData, file);
+      onClose();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsProcessing(false);
+      setStatusMessage('');
+    }
+  };
+
   const handleImport = async () => {
+    if (importType === 'file') {
+      fileInputRef.current?.click();
+      return;
+    }
+
     const input = importType === 'url' ? url : text;
     if (!input.trim()) return;
 
@@ -27,13 +59,9 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) 
     try {
       await onImport(input, title || 'New Acquisition', importType === 'url');
       onClose();
-      // Reset state for next time
-      setUrl('');
-      setText('');
-      setTitle('');
+      setUrl(''); setText(''); setTitle('');
     } catch (error: any) {
-      console.error(error);
-      alert(error.message || "Ingestion failed. Some sites block automated access. Try pasting the text manually.");
+      alert(error.message || "Failed. Try manual paste.");
     } finally {
       setIsProcessing(false);
       setStatusMessage('');
@@ -49,89 +77,65 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) 
             <p className="text-sm font-serif text-gray-400 italic">Expand your project's cognitive landscape.</p>
           </div>
           <div className="flex bg-surface p-1 rounded-xl border border-black/5">
-            <button 
-              onClick={() => setImportType('url')}
-              className={`px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${importType === 'url' ? 'bg-white text-accent shadow-sm' : 'text-gray-400 hover:text-ink'}`}
-            >
-              Link
-            </button>
-            <button 
-              onClick={() => setImportType('text')}
-              className={`px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${importType === 'text' ? 'bg-white text-accent shadow-sm' : 'text-gray-400 hover:text-ink'}`}
-            >
-              Raw
-            </button>
+            {['url', 'file', 'text'].map((type) => (
+              <button 
+                key={type}
+                onClick={() => setImportType(type as any)}
+                className={`px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${importType === type ? 'bg-white text-accent shadow-sm' : 'text-gray-400 hover:text-ink'}`}
+              >
+                {type}
+              </button>
+            ))}
           </div>
         </div>
 
         <div className="space-y-6">
-          {importType === 'url' ? (
+          {importType === 'url' && (
             <div className="space-y-4 animate-fade-in">
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-accent">Article URL</label>
-                <div className="relative">
-                  <input 
-                    value={url}
-                    onChange={e => setUrl(e.target.value)}
-                    placeholder="https://www.poetryfoundation.org/..."
-                    className="w-full bg-surface px-6 py-5 rounded-2xl border-none focus:ring-1 focus:ring-accent outline-none font-serif text-lg pr-12"
-                  />
-                  <div className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-300">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-                    </svg>
-                  </div>
-                </div>
-                <p className="text-[10px] text-gray-400 px-2 italic">Note: High-quality sources like Poetry Foundation or Substack are prioritized.</p>
-              </div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-accent">Article URL</label>
+              <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://..." className="w-full bg-surface px-6 py-5 rounded-2xl border-none focus:ring-1 focus:ring-accent outline-none font-serif text-lg" />
             </div>
-          ) : (
-            <div className="space-y-6 animate-fade-in">
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-accent">Title Hint (Optional)</label>
-                <input 
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  placeholder="e.g. Meditations on Self"
-                  className="w-full bg-surface px-6 py-4 rounded-2xl border-none focus:ring-1 focus:ring-accent outline-none font-serif text-lg"
-                />
+          )}
+
+          {importType === 'file' && (
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full h-48 border-2 border-dashed border-gray-200 rounded-[2rem] flex flex-col items-center justify-center cursor-pointer hover:border-accent/30 hover:bg-accent/5 transition-all group"
+            >
+              <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".epub" className="hidden" />
+              <div className="w-12 h-12 bg-surface rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-accent">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0018 18c-2.305 0-4.408.867-6 2.292m0-14.25v14.25" />
+                </svg>
               </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-accent">Source Content</label>
-                <textarea 
-                  value={text}
-                  onChange={e => setText(e.target.value)}
-                  placeholder="Paste the text you wish to deconstruct..."
-                  className="w-full h-48 bg-surface px-6 py-4 rounded-2xl border-none focus:ring-1 focus:ring-accent outline-none font-serif text-base resize-none no-scrollbar"
-                />
-              </div>
+              <p className="text-sm font-serif italic text-gray-400">Drop .epub file here or click to browse</p>
+            </div>
+          )}
+
+          {importType === 'text' && (
+            <div className="space-y-4 animate-fade-in">
+              <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title hint..." className="w-full bg-surface px-6 py-4 rounded-2xl border-none outline-none font-serif text-lg" />
+              <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Paste content..." className="w-full h-40 bg-surface px-6 py-4 rounded-2xl border-none outline-none font-serif text-base resize-none" />
             </div>
           )}
         </div>
 
         <div className="flex gap-4">
-          <button 
-            onClick={onClose}
-            className="flex-1 py-5 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:bg-black/5 transition-all"
-          >
-            Close
-          </button>
-          <button 
-            onClick={handleImport}
-            disabled={isProcessing || (importType === 'url' ? !url.trim() : !text.trim())}
-            className="flex-[2] py-5 bg-ink text-white rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:bg-black transition-all shadow-xl disabled:opacity-20 flex items-center justify-center gap-3"
-          >
-            {isProcessing ? (
-              <>
-                <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                {statusMessage}
-              </>
-            ) : importType === 'url' ? 'Fetch & Structure' : 'Process Text'}
-          </button>
+          <button onClick={onClose} className="flex-1 py-5 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:bg-black/5 transition-all">Close</button>
+          {importType !== 'file' && (
+            <button 
+              onClick={handleImport} 
+              disabled={isProcessing}
+              className="flex-[2] py-5 bg-ink text-white rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:bg-black transition-all shadow-xl disabled:opacity-20"
+            >
+              {isProcessing ? statusMessage : 'Process Content'}
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
 };
 
+// Fixed: Added missing default export to resolve App.tsx line 10 error
 export default ImportModal;

@@ -87,17 +87,17 @@ export interface Chapter {
 
 export interface Book {
   id: string;
-  type: MaterialType; // 新增：区分书籍与文章
+  type: MaterialType; 
   title: string;
   author: string;
   language: string;
   chapters: Chapter[]; 
   progress: number; 
   landscape?: LandscapeStats; 
-  // 生产环境元数据预留
   wordCount?: number;
-  readingTime?: number; // 分钟
+  readingTime?: number; 
   sourceUrl?: string;
+  storagePath?: string; // 新增：Supabase 中的存储路径
 }
 
 export interface Project {
