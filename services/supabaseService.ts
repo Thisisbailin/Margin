@@ -5,12 +5,21 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
  * 辅助函数：从多源获取环境变量
  */
 const getEnv = (key: string): string => {
-  try { if (process.env[key]) return process.env[key] as string; } catch {}
+  const normalize = (value: unknown): string => {
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    const lowered = trimmed.toLowerCase();
+    if (lowered === 'undefined' || lowered === 'null') return '';
+    return trimmed;
+  };
+
+  try { return normalize(process.env[key]); } catch {}
   try { 
     const metaEnv = (import.meta as any).env;
-    if (metaEnv && metaEnv[key]) return metaEnv[key]; 
+    if (metaEnv && metaEnv[key]) return normalize(metaEnv[key]); 
   } catch {}
-  try { if ((globalThis as any).process?.env?.[key]) return (globalThis as any).process.env[key]; } catch {}
+  try { return normalize((globalThis as any).process?.env?.[key]); } catch {}
   return '';
 };
 
@@ -18,9 +27,19 @@ const getEnv = (key: string): string => {
 const supabaseUrl = getEnv('VITE_SUPABASE_URL') || getEnv('SUPABASE_URL');
 const supabaseKey = getEnv('VITE_SUPABASE_ANON_KEY') || getEnv('SUPABASE_ANON_KEY');
 
+const isLikelySupabaseUrl = (value: string): boolean => {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname.endsWith('.supabase.co');
+  } catch {
+    return false;
+  }
+};
+
 let supabase: SupabaseClient | null = null;
 
-if (supabaseUrl && supabaseKey) {
+if (isLikelySupabaseUrl(supabaseUrl) && supabaseKey) {
   try {
     supabase = createClient(supabaseUrl, supabaseKey);
     console.log("Supabase initialized successfully.");
