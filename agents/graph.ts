@@ -1,4 +1,4 @@
-import { Annotation, StateGraph, START, END } from "@langchain/langgraph";
+import { Annotation, StateGraph, START, END } from "@langchain/langgraph/web";
 import { createLLMClient, type LLMUsage } from "../llm";
 import { AgentRequest } from "./types";
 import { buildMessages } from "./prompts";
