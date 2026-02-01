@@ -1,5 +1,8 @@
 {
   "name": "Margin",
   "description": "A deep reading environment that bridges close reading with implicit language learning.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
 }
