@@ -13,7 +13,7 @@ import FocusModule from './components/FocusModule';
 import LayoutShell from './components/LayoutShell';
 import SettingsModal from './components/SettingsModal';
 import ImportModal from './components/ImportModal';
-import { streamAnnotation, generateWordDefinition, streamProjectChat } from './services/geminiService';
+import { streamAnnotation, generateWordDefinition, streamProjectChat } from './services/llmService';
 import { ingestArticleContent } from './services/articleService';
 import { speakText } from './services/ttsService';
 import { uploadEpubToSupabase } from './services/supabaseService';
@@ -33,7 +33,7 @@ const LandingPage: React.FC = () => (
           </button>
         </SignInButton>
         <p className="text-[10px] uppercase tracking-[0.3em] text-gray-300 font-bold mt-4">
-          Powered by Gemini 3 & Clerk
+          Powered by Qwen & Clerk
         </p>
       </div>
     </div>
@@ -93,7 +93,10 @@ const MarginApp: React.FC = () => {
         
         const [processedChapters, path] = await Promise.all([
           Promise.all(epubData.chapters.slice(0, 3).map(async (ch: any, idx: number) => {
-            const struct = await ingestArticleContent(ch.content, ch.title, false);
+            const struct = await ingestArticleContent(ch.content, ch.title, false, {
+              user_id: user.id,
+              project_id: activeProject.id,
+            });
             return { ...struct, number: idx + 1 };
           })),
           originalFile ? uploadEpubToSupabase(originalFile, bookId, user.id) : Promise.resolve(undefined)
@@ -102,7 +105,10 @@ const MarginApp: React.FC = () => {
         chapters = processedChapters;
         storagePath = path;
       } else {
-        const chapter = await ingestArticleContent(input, title, isUrl);
+        const chapter = await ingestArticleContent(input, title, isUrl, {
+          user_id: user.id,
+          project_id: activeProject.id,
+        });
         chapters = [chapter];
       }
       
@@ -214,6 +220,10 @@ const MarginApp: React.FC = () => {
     try {
       await streamAnnotation(context, prompt, (fullText) => {
         setMessages(prev => prev.map(m => m.id === newMsgId ? { ...m, content: fullText } : m));
+      }, {
+        user_id: user?.id || "",
+        project_id: activeProject.id,
+        book_id: activeBook.id,
       });
     } catch (e) {
       console.error(e);
@@ -236,6 +246,9 @@ const MarginApp: React.FC = () => {
     try {
       await streamProjectChat(activeProject, [...projectMessages, userMsg], (fullText) => {
         setProjectMessages(prev => prev.map(m => m.id === agentMsgId ? { ...m, content: fullText } : m));
+      }, {
+        user_id: user?.id || "",
+        project_id: activeProject.id,
       });
     } catch (e) {
       console.error(e);
@@ -244,8 +257,26 @@ const MarginApp: React.FC = () => {
     }
   };
 
+  // Auto-collapse panels on mobile devices
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setLeftPanelState('collapsed');
+        setRightPanelState('collapsed');
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    // Initial check
+    if (window.innerWidth < 768) {
+      setLeftPanelState('collapsed');
+      setRightPanelState('collapsed');
+    }
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
-    <div className="h-screen bg-paper text-ink font-sans flex flex-col md:flex-row overflow-hidden relative">
+    <div className="h-screen w-screen bg-paper text-ink font-sans flex flex-col md:flex-row overflow-hidden relative">
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} proficiency={userProficiency} onProficiencyChange={setUserProficiency} />
       <ImportModal isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} onImport={handleImportArticle} />
 
@@ -263,7 +294,13 @@ const MarginApp: React.FC = () => {
             projectLexicon={projectLexicon}
             readingProgress={readingProgress}
             recordInteraction={recordInteraction}
-            generateWordDefinition={generateWordDefinition}
+            generateWordDefinition={(word, context) =>
+              generateWordDefinition(word, context, {
+                user_id: user?.id || "",
+                project_id: activeProject.id,
+                book_id: activeBook?.id || "",
+              })
+            }
             onImportClick={() => setIsImportOpen(true)}
             onClose={() => setIsFocusModuleOpen(false)}
           />
@@ -293,22 +330,22 @@ const MarginApp: React.FC = () => {
         </div>
       </LayoutShell>
 
-      <main className={`h-full overflow-y-auto no-scrollbar flex-1 relative transition-all duration-700 ${leftPanelState === 'expanded' || rightPanelState === 'expanded' ? 'opacity-0 scale-95 translate-y-4' : 'opacity-100 scale-100 translate-y-0'}`}>
-        <div className="mx-auto px-12 py-32 max-w-2xl">
-          <header className="mb-28 text-center animate-fade-in">
+      <main className={`h-full w-full overflow-y-auto no-scrollbar flex-1 relative transition-all duration-700 ${leftPanelState === 'expanded' || rightPanelState === 'expanded' ? 'md:opacity-0 md:scale-95 md:translate-y-4' : 'opacity-100 scale-100 translate-y-0'}`}>
+        <div className="mx-auto px-4 md:px-12 py-20 md:py-32 max-w-2xl">
+          <header className="mb-16 md:mb-28 text-center animate-fade-in">
              <div className="text-[10px] uppercase tracking-[0.4em] text-accent font-bold mb-6">Current Reading</div>
-             <h1 className="text-6xl md:text-7xl font-display text-ink mb-10 tracking-tight leading-[1.1]">{activeBook?.title}</h1>
-             <div className="text-sm font-serif italic text-gray-400">by {activeBook?.author}</div>
+             <h1 className="text-4xl md:text-6xl lg:text-7xl font-display text-ink mb-6 md:mb-10 tracking-tight leading-[1.1]">{activeBook?.title}</h1>
+             <div className="text-xs md:text-sm font-serif italic text-gray-400">by {activeBook?.author}</div>
           </header>
 
-          <div className="space-y-24">
+          <div className="space-y-12 md:space-y-24">
             {activeBook?.chapters.map((chapter) => (
               <section key={chapter.id} className="animate-fade-in">
-                <div className="mb-12 border-b border-black/5 pb-4">
-                   <h2 className="font-display text-2xl italic text-ink/40">{chapter.title}</h2>
+                <div className="mb-8 md:mb-12 border-b border-black/5 pb-4">
+                   <h2 className="font-display text-lg md:text-2xl italic text-ink/40">{chapter.title}</h2>
                 </div>
                 {chapter.content.map((para) => (
-                  <div key={para.id} className="mb-8 prose prose-lg max-w-none">
+                  <div key={para.id} className="mb-8 prose prose-sm md:prose-lg max-w-none">
                     {para.sentences.map((sentence) => (
                       <span 
                         key={sentence.id}
@@ -335,34 +372,34 @@ const MarginApp: React.FC = () => {
             ))}
           </div>
 
-          <footer className="mt-40 pt-20 border-t border-black/5 text-center">
+          <footer className="mt-20 md:mt-40 pt-10 md:pt-20 border-t border-black/5 text-center">
              <p className="text-[10px] uppercase tracking-widest text-gray-300 font-bold">End of Loaded Material</p>
           </footer>
         </div>
         
         {/* Floating Toggle Controls */}
-        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-3 z-50">
+        <div className="fixed bottom-6 md:bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-2 md:gap-3 z-40">
            <button 
             onClick={() => setLeftPanelState(leftPanelState === 'collapsed' ? 'default' : 'collapsed')}
-            className={`p-4 rounded-full shadow-float transition-all ${leftPanelState !== 'collapsed' ? 'bg-ink text-white' : 'bg-white text-ink hover:bg-surface'}`}
+            className={`p-3 md:p-4 rounded-full shadow-float transition-all ${leftPanelState !== 'collapsed' ? 'bg-ink text-white' : 'bg-white text-ink hover:bg-surface'}`}
            >
-             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 md:w-5 md:h-5">
                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
              </svg>
            </button>
            <button 
             onClick={() => setRightPanelState(rightPanelState === 'collapsed' ? 'default' : 'collapsed')}
-            className={`p-4 rounded-full shadow-float transition-all ${rightPanelState !== 'collapsed' ? 'bg-ink text-white' : 'bg-white text-ink hover:bg-surface'}`}
+            className={`p-3 md:p-4 rounded-full shadow-float transition-all ${rightPanelState !== 'collapsed' ? 'bg-ink text-white' : 'bg-white text-ink hover:bg-surface'}`}
            >
-             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 md:w-5 md:h-5">
                <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 0 1-.923 1.785c-.442.496.103 1.228.718 1.025a5.503 5.503 0 0 0 2.316-1.392l.06-.06c.397-.396.944-.606 1.48-.544 1.157.133 2.344.204 3.551.204Z" />
              </svg>
            </button>
            <button 
             onClick={() => setIsSettingsOpen(true)}
-            className="p-4 bg-white text-ink rounded-full shadow-float hover:bg-surface transition-all"
+            className="p-3 md:p-4 bg-white text-ink rounded-full shadow-float hover:bg-surface transition-all"
            >
-             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 md:w-5 md:h-5">
                <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.59c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 0 1 0 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 0 1-.22.127c-.332.183-.582.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.59c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.324-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.937 6.937 0 0 1 0-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281Z" />
                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
              </svg>

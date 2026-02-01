@@ -1,6 +1,7 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
-import { Chapter, Paragraph, MaterialType } from "../types";
+import { Chapter, Paragraph } from "../types";
+import { generateLLM } from "./llmClient";
+import { getModelForTier } from "./llmConfig";
 
 /**
  * 核心逻辑：尝试抓取网页内容
@@ -27,18 +28,20 @@ const fetchUrlContent = async (url: string): Promise<string> => {
 };
 
 /**
- * 使用 Gemini 3 Flash 进行智能内容提取与结构化转换
+ * 使用 LLM 进行智能内容提取与结构化转换（Qwen via server）
  */
-export const ingestArticleContent = async (input: string, titleHint: string, isUrl: boolean): Promise<Chapter> => {
+export const ingestArticleContent = async (
+  input: string,
+  titleHint: string,
+  isUrl: boolean,
+  metadata?: Record<string, string>
+): Promise<Chapter> => {
   let contentToAnalyze = input;
 
   if (isUrl) {
     contentToAnalyze = await fetchUrlContent(input);
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const model = 'gemini-3-flash-preview';
-  
   const prompt = `
     你是一个专业的内容结构化专家。你收到了以下${isUrl ? 'HTML 源代码' : '原始文本'}。
     
@@ -56,37 +59,46 @@ export const ingestArticleContent = async (input: string, titleHint: string, isU
     ${contentToAnalyze.substring(0, 20000)}
   `;
 
-  const response = await ai.models.generateContent({
-    model,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          author: { type: Type.STRING },
-          paragraphs: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                type: { type: Type.STRING, description: "prose, poetry, or dialogue" },
-                sentences: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING }
-                }
-              },
-              required: ["type", "sentences"]
-            }
-          }
-        },
-        required: ["title", "paragraphs"]
-      }
-    }
+  const schemaHint = `
+请严格输出 JSON，结构如下：
+{
+  "title": "string",
+  "author": "string(optional)",
+  "paragraphs": [
+    { "type": "prose|poetry|dialogue", "sentences": ["..."] }
+  ]
+}
+只返回 JSON，不要输出其他文字。`;
+
+  const response = await generateLLM({
+    model: getModelForTier("L2") || "L2",
+    messages: [
+      { role: "system", content: "你是一个严谨的内容结构化引擎，只输出 JSON。" },
+      { role: "user", content: `${prompt}\n\n${schemaHint}` },
+    ],
+    metadata: {
+      source: "app",
+      feature: "article_ingest",
+      ...(metadata || {}),
+    },
   });
 
-  const data = JSON.parse(response.text || '{}');
+  const parseJson = (text: string): any => {
+    try {
+      return JSON.parse(text);
+    } catch {
+      const start = text.indexOf("{");
+      const end = text.lastIndexOf("}");
+      if (start >= 0 && end > start) {
+        try {
+          return JSON.parse(text.slice(start, end + 1));
+        } catch {}
+      }
+      return {};
+    }
+  };
+
+  const data = parseJson(response.text || "");
   
   if (!data.paragraphs || data.paragraphs.length === 0) {
     throw new Error("Failed to extract meaningful paragraphs from the source.");

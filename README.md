@@ -15,6 +15,6 @@ View your app in AI Studio: https://ai.studio/apps/drive/1OVhHAFpBKqvw9h1oeZJh0U
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Set the `QWEN_API_KEY` (or `DASHSCOPE_API_KEY`) in [.env.local](.env.local)
 3. Run the app:
    `npm run dev`

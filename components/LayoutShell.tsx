@@ -56,7 +56,7 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
   if (state === 'expanded') {
     return (
       <aside className="fixed inset-0 z-[100] bg-paper animate-fade-in flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-hidden px-10 md:px-20 pt-20 pb-8">
+        <div className="flex-1 overflow-hidden px-6 md:px-20 pt-16 md:pt-20 pb-8">
            <div className="max-w-[1400px] mx-auto h-full flex flex-col relative">
               {expandedContent || children}
            </div>
@@ -67,8 +67,14 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
 
   if (state === 'collapsed') {
     return (
-      <aside className="relative transition-all duration-700 ease-[cubic-bezier(0.25,0.8,0.25,1)] overflow-hidden opacity-0 w-0 h-full pointer-events-none" />
+      <aside className="relative transition-all duration-700 ease-[cubic-bezier(0.25,0.8,0.25,1)] overflow-hidden opacity-0 w-0 h-0 md:h-full pointer-events-none" />
     );
+  }
+
+  // Mobile panel modal (default state on mobile)
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  if (isMobile && state === 'default') {
+    return null;
   }
 
   return (
@@ -76,10 +82,10 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
       ref={sidebarRef}
       style={{ width: window.innerWidth >= 768 ? width : '100%' }}
       className={`
-        flex-shrink-0 flex flex-col 
+        hidden md:flex flex-shrink-0 flex flex-col 
         bg-surface relative overflow-hidden z-50
         ${side === 'left' ? 'border-r' : 'border-l'} border-black/5
-        w-full h-full
+        h-full
         ${isResizing ? 'transition-none' : 'transition-all duration-700 ease-[cubic-bezier(0.25,0.8,0.25,1)]'}
       `}
     >
