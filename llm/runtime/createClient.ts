@@ -7,7 +7,7 @@ import { createTrafficRecorder, withTraffic } from "../traffic/recorder";
 export type LLMRuntimeConfig = LLMRegistryConfig;
 
 const resolveRequestModel = (req: LLMRequest, config?: LLMRuntimeConfig): string => {
-  const fromReq = req.model || config?.defaultModel || \"L2\";
+  const fromReq = req.model || config?.defaultModel || "L2";
   const resolved = resolveModel(fromReq, config);
   if (!resolved) {
     throw new LLMError("InvalidRequest", "Missing model mapping for request");

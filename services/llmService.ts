@@ -94,7 +94,7 @@ export const generateWordDefinition = async (word: string, context?: string, met
       messages: [
         {
           role: "user",
-          content: `提供单词 \"${word}\" 在阅读中的核心中文释义。${context ? `参考语境: ${context}` : ""} 仅返回释义内容，越简洁越好，控制在15字以内。`,
+          content: `提供单词 "${word}" 在阅读中的核心中文释义。${context ? `参考语境: ${context}` : ""} 仅返回释义内容，越简洁越好，控制在15字以内。`,
         },
       ],
       metadata: {
