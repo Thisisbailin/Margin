@@ -2,14 +2,36 @@ import { createLLMClient, type LLMStreamChunk, type LLMRegistryConfig } from "..
 import { AgentRequest, AgentResponse } from "./types";
 import { buildMessages } from "./prompts";
 import { createAgentGraph } from "./graph";
+import { ToolRegistry, createToolRegistry } from "./tools";
 
 const resolveTask = (task?: AgentRequest["task"]) => task || "freeform";
 
+export type AgentRuntimeConfig = {
+  llm?: LLMRegistryConfig;
+  tools?: ToolRegistry;
+};
+
+const resolveRuntimeConfig = (
+  config?: LLMRegistryConfig | AgentRuntimeConfig
+): AgentRuntimeConfig => {
+  if (!config) return { llm: undefined, tools: createToolRegistry() };
+  const looksLikeLLMConfig =
+    "provider" in config ||
+    "apiKey" in config ||
+    "modelAliases" in config ||
+    "traffic" in config;
+  if (looksLikeLLMConfig) {
+    return { llm: config as LLMRegistryConfig, tools: createToolRegistry() };
+  }
+  return config as AgentRuntimeConfig;
+};
+
 export const runAgent = async (
   request: AgentRequest,
-  config?: LLMRegistryConfig
+  config?: LLMRegistryConfig | AgentRuntimeConfig
 ): Promise<AgentResponse> => {
-  const app = createAgentGraph(config);
+  const runtime = resolveRuntimeConfig(config);
+  const app = createAgentGraph({ llm: runtime.llm, tools: runtime.tools });
 
   const initialState = {
     task: resolveTask(request.task),
@@ -20,6 +42,10 @@ export const runAgent = async (
     model: request.model || "",
     temperature: request.temperature,
     maxTokens: request.maxTokens,
+    plan: "",
+    toolCalls: [],
+    toolResults: [],
+    draft: "",
     metadata: {
       source: "agent",
       feature: request.task || "freeform",
@@ -39,9 +65,10 @@ export const runAgent = async (
 
 export const streamAgent = (
   request: AgentRequest,
-  config?: LLMRegistryConfig
+  config?: LLMRegistryConfig | AgentRuntimeConfig
 ): AsyncIterable<LLMStreamChunk> => {
-  const llmClient = createLLMClient(config);
+  const runtime = resolveRuntimeConfig(config);
+  const llmClient = createLLMClient(runtime.llm);
   const { messages, model } = buildMessages({
     ...request,
     task: resolveTask(request.task),

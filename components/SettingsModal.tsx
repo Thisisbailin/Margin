@@ -97,6 +97,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [availableModels, setAvailableModels] = useState<QwenModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelFetchMessage, setModelFetchMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
+  // Track collapsed/expanded state for each model group. We default to collapsed when models are fetched
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   const handleKeySelection = async () => {
     try {
@@ -172,6 +174,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       const data = await response.json();
       const models: QwenModel[] = Array.isArray(data?.models) ? data.models : [];
       setAvailableModels(models);
+      // Collapse all groups by default since the list can be very long
+      const groupKeys: Record<string, boolean> = {};
+      models.forEach((m) => {
+        groupKeys[getQwenCategory(m).key] = true;
+      });
+      setCollapsedGroups(groupKeys);
       setModelFetchMessage({
         type: 'success',
         text: models.length ? `获取成功，${models.length} 个模型` : '获取成功，但返回为空',
@@ -332,17 +340,32 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             ) : (
               <div className="space-y-5">
-                {qwenGroups.map((group) => (
-                  <div key={group.key} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400">{group.label}</div>
-                      <span className="text-[9px] text-gray-400">{group.items.length} models</span>
+                {qwenGroups.map((group) => {
+                  const isCollapsed = collapsedGroups[group.key] ?? true;
+                  return (
+                    <div key={group.key} className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => setCollapsedGroups((prev) => ({ ...prev, [group.key]: !prev[group.key] }))}
+                        className="w-full flex items-center justify-between text-left"
+                        aria-expanded={!isCollapsed}
+                      >
+                        <div className="flex items-center gap-3">
+                          <svg className={`w-3 h-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M9 18l6-6-6-6" />
+                          </svg>
+                          <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400">{group.label}</div>
+                        </div>
+                        <span className="text-[9px] text-gray-400">{group.items.length} models</span>
+                      </button>
+                      {!isCollapsed && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {group.items.map((model) => renderModelCard(model))}
+                        </div>
+                      )}
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {group.items.map((model) => renderModelCard(model))}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

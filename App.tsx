@@ -14,6 +14,7 @@ import LayoutShell from './components/LayoutShell';
 import SettingsModal from './components/SettingsModal';
 import ImportModal from './components/ImportModal';
 import TrafficDashboardModal from './components/TrafficDashboardModal';
+import MeditationRoom from './components/MeditationRoom';
 import { streamAnnotation, generateWordDefinition, streamProjectChat } from './services/llmService';
 import { ingestArticleContent } from './services/articleService';
 import { speakText } from './services/ttsService';
@@ -52,6 +53,7 @@ const MarginApp: React.FC = () => {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isFocusModuleOpen, setIsFocusModuleOpen] = useState(false);
   const [isTrafficOpen, setIsTrafficOpen] = useState(false);
+  const [isMeditationOpen, setIsMeditationOpen] = useState(false);
   
   const [activeProject, setActiveProject] = useState<Project>(MOCK_PROJECT);
   const [activeBook, setActiveBook] = useState<Book | undefined>(MOCK_PROJECT.books[0]);
@@ -282,6 +284,13 @@ const MarginApp: React.FC = () => {
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} proficiency={userProficiency} onProficiencyChange={setUserProficiency} />
       <ImportModal isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} onImport={handleImportArticle} />
       <TrafficDashboardModal isOpen={isTrafficOpen} onClose={() => setIsTrafficOpen(false)} userId={user?.id} projectId={activeProject.id} />
+      <MeditationRoom
+        isOpen={isMeditationOpen}
+        onClose={() => setIsMeditationOpen(false)}
+        userId={user?.id}
+        projectId={activeProject.id}
+        bookId={activeBook?.id}
+      />
 
       {isFocusModuleOpen && (
         <div className="fixed inset-0 z-[120] bg-paper animate-fade-in-up p-8 md:p-20 overflow-hidden">
@@ -335,6 +344,12 @@ const MarginApp: React.FC = () => {
                   className="w-full py-2.5 bg-white border border-black/5 rounded-xl text-[10px] font-bold uppercase tracking-widest text-ink hover:bg-surface transition-all"
                 >
                   AI Traffic Hub
+                </button>
+                <button
+                  onClick={() => setIsMeditationOpen(true)}
+                  className="w-full py-2.5 bg-white border border-black/5 rounded-xl text-[10px] font-bold uppercase tracking-widest text-ink hover:bg-surface transition-all"
+                >
+                  冥想室
                 </button>
               </div>
            </div>

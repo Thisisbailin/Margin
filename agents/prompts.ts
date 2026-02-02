@@ -1,5 +1,6 @@
 import { AgentRequest, AgentTask } from "./types";
 import { LLMMessage } from "../llm";
+import { ToolDefinition, ToolResult } from "./tools";
 
 const defaultModelForTask = (task: AgentTask): string => {
   if (task === "lexicon") return "L1";
@@ -81,4 +82,51 @@ ${adaptation}
     messages,
     model: request.model || defaultModelForTask(task),
   };
+};
+
+const formatTools = (tools: ToolDefinition[]): string => {
+  if (!tools.length) return "No tools available.";
+  return tools
+    .map((tool) => `- ${tool.name}: ${tool.description}`)
+    .join("\n");
+};
+
+export const buildPlanMessages = (baseMessages: LLMMessage[], tools: ToolDefinition[]): LLMMessage[] => {
+  const system = `You are a planning agent. Produce a short execution plan and optional tool calls.
+Available tools:
+${formatTools(tools)}
+
+Return JSON only, following this schema:
+{
+  "plan": "brief plan",
+  "tool_calls": [
+    { "name": "toolName", "input": { "key": "value" } }
+  ]
+}
+
+If no tools are needed, return an empty tool_calls array.`;
+
+  return [{ role: "system", content: system }, ...baseMessages];
+};
+
+export const buildActMessages = (
+  baseMessages: LLMMessage[],
+  plan: string,
+  toolResults: ToolResult[]
+): LLMMessage[] => {
+  const system = `You are an execution agent. Use the plan and tool results (if any) to answer the user. Respond in the user's language.`;
+  const toolText = toolResults.length
+    ? JSON.stringify(toolResults, null, 2)
+    : "[]";
+  const user = `Plan:\n${plan || "N/A"}\n\nTool Results:\n${toolText}`;
+  return [{ role: "system", content: system }, ...baseMessages, { role: "user", content: user }];
+};
+
+export const buildReflectMessages = (
+  baseMessages: LLMMessage[],
+  draft: string
+): LLMMessage[] => {
+  const system = `You are a reviewer. Improve the draft answer for correctness and completeness. Keep it concise and respond in the user's language.`;
+  const user = `Draft Answer:\n${draft}`;
+  return [{ role: "system", content: system }, ...baseMessages, { role: "user", content: user }];
 };

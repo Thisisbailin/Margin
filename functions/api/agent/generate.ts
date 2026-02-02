@@ -1,4 +1,4 @@
-import { runAgent, type AgentRequest } from "../../../agents";
+import { createToolRegistry, createArchiveTools, runAgent, type AgentRequest } from "../../../agents";
 
 const jsonResponse = (payload: unknown, init?: ResponseInit) => {
   return new Response(JSON.stringify(payload), {
@@ -59,6 +59,15 @@ export const onRequest = async ({ request, env }: { request: Request; env: Recor
     return jsonResponse({ error: "Invalid request body" }, { status: 400, headers: corsHeaders });
   }
 
-  const result = await runAgent(body, resolveEnvConfig(env));
+  const tools = createToolRegistry(
+    createArchiveTools({
+      supabaseUrl: env.SUPABASE_URL,
+      supabaseKey: env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY,
+      archiveTable: env.AGENT_ARCHIVE_TABLE || "agent_archives",
+      entryTable: env.AGENT_ARCHIVE_ENTRY_TABLE || "agent_archive_entries",
+    })
+  );
+
+  const result = await runAgent(body, { llm: resolveEnvConfig(env), tools });
   return jsonResponse(result, { headers: corsHeaders });
 };
