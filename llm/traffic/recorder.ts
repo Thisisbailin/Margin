@@ -82,6 +82,27 @@ const recordToSupabase = async (record: TrafficRecord, config: TrafficRecorderCo
   const base = config.supabaseUrl.replace(/\/+$/, "");
   const table = config.table || "ai_requests";
   const endpoint = `${base}/rest/v1/${table}`;
+  const payload = {
+    id: record.id,
+    started_at: record.startedAt,
+    ended_at: record.endedAt,
+    latency_ms: record.latencyMs,
+    provider: record.provider,
+    model: record.model,
+    stream: record.stream,
+    status: record.status,
+    error: record.error,
+    prompt_tokens: record.promptTokens,
+    response_tokens: record.responseTokens,
+    total_tokens: record.totalTokens,
+    message_count: record.messageCount,
+    prompt_chars: record.promptChars,
+    metadata: record.metadata,
+    source: record.source,
+    feature: record.feature,
+    user_id: record.userId,
+    project_id: record.projectId,
+  };
 
   const res = await fetch(endpoint, {
     method: "POST",
@@ -91,7 +112,7 @@ const recordToSupabase = async (record: TrafficRecord, config: TrafficRecorderCo
       Authorization: `Bearer ${config.supabaseKey}`,
       Prefer: "return=minimal",
     },
-    body: JSON.stringify(record),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
