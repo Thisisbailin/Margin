@@ -13,6 +13,7 @@ import FocusModule from './components/FocusModule';
 import LayoutShell from './components/LayoutShell';
 import SettingsModal from './components/SettingsModal';
 import ImportModal from './components/ImportModal';
+import TrafficDashboardModal from './components/TrafficDashboardModal';
 import { streamAnnotation, generateWordDefinition, streamProjectChat } from './services/llmService';
 import { ingestArticleContent } from './services/articleService';
 import { speakText } from './services/ttsService';
@@ -50,6 +51,7 @@ const MarginApp: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isFocusModuleOpen, setIsFocusModuleOpen] = useState(false);
+  const [isTrafficOpen, setIsTrafficOpen] = useState(false);
   
   const [activeProject, setActiveProject] = useState<Project>(MOCK_PROJECT);
   const [activeBook, setActiveBook] = useState<Book | undefined>(MOCK_PROJECT.books[0]);
@@ -279,6 +281,7 @@ const MarginApp: React.FC = () => {
     <div className="h-screen w-screen bg-paper text-ink font-sans flex flex-col md:flex-row overflow-hidden relative">
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} proficiency={userProficiency} onProficiencyChange={setUserProficiency} />
       <ImportModal isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} onImport={handleImportArticle} />
+      <TrafficDashboardModal isOpen={isTrafficOpen} onClose={() => setIsTrafficOpen(false)} userId={user?.id} projectId={activeProject.id} />
 
       {isFocusModuleOpen && (
         <div className="fixed inset-0 z-[120] bg-paper animate-fade-in-up p-8 md:p-20 overflow-hidden">
@@ -319,12 +322,20 @@ const MarginApp: React.FC = () => {
               >
                 Project Synthesis Engine
               </button>
-              <div className="flex items-center gap-4">
-                <UserButton afterSignOutUrl="/" />
-                <div className="flex flex-col">
-                   <span className="text-xs font-bold text-ink">{user?.fullName || user?.username}</span>
-                   <span className="text-[9px] uppercase tracking-widest text-gray-400">Researcher</span>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-4">
+                  <UserButton afterSignOutUrl="/" />
+                  <div className="flex flex-col">
+                     <span className="text-xs font-bold text-ink">{user?.fullName || user?.username}</span>
+                     <span className="text-[9px] uppercase tracking-widest text-gray-400">Researcher</span>
+                  </div>
                 </div>
+                <button
+                  onClick={() => setIsTrafficOpen(true)}
+                  className="w-full py-2.5 bg-white border border-black/5 rounded-xl text-[10px] font-bold uppercase tracking-widest text-ink hover:bg-surface transition-all"
+                >
+                  AI Traffic Hub
+                </button>
               </div>
            </div>
         </div>

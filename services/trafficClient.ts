@@ -4,11 +4,17 @@ export type TrafficRecord = {
   provider?: string;
   model?: string;
   status?: string;
+  error?: string;
   total_tokens?: number;
+  prompt_tokens?: number;
+  response_tokens?: number;
   feature?: string;
+  source?: string;
   user_id?: string;
   project_id?: string;
   latency_ms?: number;
+  stream?: boolean;
+  message_count?: number;
   metadata?: Record<string, unknown>;
 };
 
@@ -20,6 +26,8 @@ export type TrafficSummary = {
   byFeature: Record<string, { totalTokens: number; count: number }>;
   byModel: Record<string, { totalTokens: number; count: number }>;
   byProvider: Record<string, { totalTokens: number; count: number }>;
+  byDay?: Record<string, { totalTokens: number; count: number }>;
+  series?: Array<{ date: string; totalTokens: number; count: number }>;
 };
 
 const buildQuery = (params: Record<string, string | number | undefined>) => {
@@ -55,6 +63,12 @@ export const fetchTrafficSummary = async (params?: {
   limit?: number;
   from?: string;
   to?: string;
+  user_id?: string;
+  project_id?: string;
+  feature?: string;
+  model?: string;
+  provider?: string;
+  status?: string;
 }): Promise<TrafficSummary> => {
   const query = buildQuery(params || {});
   const response = await fetch(`/api/traffic/summary${query ? `?${query}` : ""}`);
