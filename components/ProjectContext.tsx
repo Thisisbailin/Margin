@@ -6,14 +6,16 @@ interface ProjectContextProps {
   project: Project;
   activeBookId?: string;
   onBookSelect: (book: Book) => void;
-  onImportClick: () => void; // 新增回调
+  onImportClick?: () => void; // 新增回调
+  showImport?: boolean;
 }
 
 const ProjectContext: React.FC<ProjectContextProps> = ({ 
   project, 
   activeBookId, 
   onBookSelect,
-  onImportClick
+  onImportClick,
+  showImport = true
 }) => {
   return (
     <div className="flex flex-col font-sans h-full">
@@ -61,15 +63,17 @@ const ProjectContext: React.FC<ProjectContextProps> = ({
           </div>
         ))}
 
-        <button 
-          onClick={onImportClick}
-          className="w-full py-4 border border-dashed border-gray-200 rounded-2xl text-[10px] uppercase font-bold tracking-widest text-gray-300 hover:text-accent hover:border-accent/30 transition-all flex items-center justify-center gap-2"
-        >
-           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
-             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-           </svg>
-           Import Article
-        </button>
+        {showImport && (
+          <button 
+            onClick={onImportClick}
+            className="w-full py-4 border border-dashed border-gray-200 rounded-2xl text-[10px] uppercase font-bold tracking-widest text-gray-300 hover:text-accent hover:border-accent/30 transition-all flex items-center justify-center gap-2"
+          >
+             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
+               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+             </svg>
+             Import Article
+          </button>
+        )}
       </div>
     </div>
   );

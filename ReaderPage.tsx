@@ -1,5 +1,4 @@
 import React from 'react';
-import { UserButton } from '@clerk/clerk-react';
 import {
   AgentMessage,
   Book,
@@ -22,12 +21,7 @@ interface ReaderPageProps {
   activeProject: Project;
   activeBook: Book | undefined;
   onBookSelect: (book: Book) => void;
-  onImportClick: () => void;
   onEnterHome: () => void;
-  user: { fullName?: string | null; username?: string | null } | null;
-  onOpenSettings: () => void;
-  onOpenTraffic: () => void;
-  onOpenMeditation: () => void;
   isZenMode: boolean;
   focusedSentenceId: string | null;
   activeToken: WordOccurrence | null;
@@ -46,12 +40,7 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
   activeProject,
   activeBook,
   onBookSelect,
-  onImportClick,
   onEnterHome,
-  user,
-  onOpenSettings,
-  onOpenTraffic,
-  onOpenMeditation,
   isZenMode,
   focusedSentenceId,
   activeToken,
@@ -70,47 +59,20 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
         title="Landscape"
         headerContent={<div className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent">Landscape</div>}
       >
-        <div className="p-8 h-full flex flex-col justify-between">
-          <ProjectContext
-            project={activeProject}
-            activeBookId={activeBook?.id}
-            onBookSelect={onBookSelect}
-            onImportClick={onImportClick}
-          />
-          <div className="pt-8 border-t border-black/5 flex flex-col gap-6">
-            <button
-              onClick={onEnterHome}
-              className="w-full py-4 bg-surface border border-black/5 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-ink hover:bg-white hover:shadow-soft transition-all flex items-center justify-center gap-2"
-            >
-              Project Synthesis Engine
-            </button>
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-4">
-                <UserButton afterSignOutUrl="/" />
-                <div className="flex flex-col">
-                  <span className="text-xs font-bold text-ink">{user?.fullName || user?.username}</span>
-                  <span className="text-[9px] uppercase tracking-widest text-gray-400">Researcher</span>
-                </div>
-              </div>
-              <button
-                onClick={onOpenSettings}
-                className="w-full py-2.5 bg-white border border-black/5 rounded-xl text-[10px] font-bold uppercase tracking-widest text-ink hover:bg-surface transition-all"
-              >
-                Settings
-              </button>
-              <button
-                onClick={onOpenTraffic}
-                className="w-full py-2.5 bg-white border border-black/5 rounded-xl text-[10px] font-bold uppercase tracking-widest text-ink hover:bg-surface transition-all"
-              >
-                AI Traffic Hub
-              </button>
-              <button
-                onClick={onOpenMeditation}
-                className="w-full py-2.5 bg-white border border-black/5 rounded-xl text-[10px] font-bold uppercase tracking-widest text-ink hover:bg-surface transition-all"
-              >
-                冥想室
-              </button>
-            </div>
+        <div className="p-8 h-full flex flex-col gap-6">
+          <button
+            onClick={onEnterHome}
+            className="w-full py-3.5 bg-surface border border-black/5 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-ink hover:bg-white hover:shadow-soft transition-all flex items-center justify-center gap-2"
+          >
+            Back To Home
+          </button>
+          <div className="flex-1 overflow-hidden">
+            <ProjectContext
+              project={activeProject}
+              activeBookId={activeBook?.id}
+              onBookSelect={onBookSelect}
+              showImport={false}
+            />
           </div>
         </div>
       </LayoutShell>
