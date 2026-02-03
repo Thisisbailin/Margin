@@ -21,7 +21,6 @@ const MeditationRoom = lazy(() => import('./components/MeditationRoom'));
 const LandingPage: React.FC = () => (
   <div className="h-screen bg-paper flex flex-col items-center justify-center p-6 text-center animate-fade-in">
     <div className="max-w-xl">
-      <div className="text-5xl mb-4">🧲</div>
       <h1 className="text-8xl font-display italic text-ink mb-8 tracking-tighter">Margin</h1>
       <p className="text-xl font-serif text-gray-500 italic leading-relaxed mb-12">
         "In the margins of what we read, we find the center of what we think."
