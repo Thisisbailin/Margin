@@ -1,5 +1,5 @@
 import React from 'react';
-import { Book, Project, AgentMessage, LexiconItem } from './types';
+import { Book, Project, AgentMessage, LexiconItem, UserProficiency } from './types';
 import FocusModule from './components/FocusModule';
 
 interface HomeProps {
@@ -16,9 +16,9 @@ interface HomeProps {
   recordInteraction: (lemma: string, type: 'implicit' | 'explicit', weight: number, occurrenceId: string) => void;
   generateWordDefinition: (word: string) => Promise<string>;
   onImportClick: () => void;
-  onOpenSettings: () => void;
-  onOpenTraffic: () => void;
-  onOpenMeditation: () => void;
+  userId?: string;
+  proficiency: UserProficiency;
+  onProficiencyChange: (p: UserProficiency) => void;
 }
 
 const Home: React.FC<HomeProps> = ({
@@ -35,9 +35,9 @@ const Home: React.FC<HomeProps> = ({
   recordInteraction,
   generateWordDefinition,
   onImportClick,
-  onOpenSettings,
-  onOpenTraffic,
-  onOpenMeditation
+  userId,
+  proficiency,
+  onProficiencyChange
 }) => {
   return (
     <div className="h-screen w-screen bg-paper text-ink font-sans overflow-hidden">
@@ -58,9 +58,9 @@ const Home: React.FC<HomeProps> = ({
               recordInteraction={recordInteraction}
               generateWordDefinition={generateWordDefinition}
               onImportClick={onImportClick}
-              onOpenSettings={onOpenSettings}
-              onOpenTraffic={onOpenTraffic}
-              onOpenMeditation={onOpenMeditation}
+              userId={userId}
+              proficiency={proficiency}
+              onProficiencyChange={onProficiencyChange}
             />
           </div>
         </div>
