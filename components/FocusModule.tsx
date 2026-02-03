@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Project, Book, AgentMessage, LexiconItem, VocabularyStat } from '../types';
+import { Project, Book, AgentMessage, LexiconItem } from '../types';
 import ProjectContext from './ProjectContext';
 import TerrainMap from './TerrainMap';
 
@@ -20,7 +20,9 @@ interface FocusModuleProps {
   generateWordDefinition: (word: string) => Promise<string>;
   // Added onImportClick to props interface
   onImportClick: () => void;
-  onClose: () => void;
+  onOpenSettings: () => void;
+  onOpenTraffic: () => void;
+  onOpenMeditation: () => void;
 }
 
 const FocusModule: React.FC<FocusModuleProps> = ({
@@ -37,40 +39,58 @@ const FocusModule: React.FC<FocusModuleProps> = ({
   recordInteraction,
   generateWordDefinition,
   onImportClick,
-  onClose
+  onOpenSettings,
+  onOpenTraffic,
+  onOpenMeditation
 }) => {
-  const [view, setView] = useState<'project' | 'terrain'>('project');
+  const [view, setView] = useState<'project' | 'terrain' | 'meditation' | 'traffic' | 'settings'>('project');
 
-  return (
-    <div className="h-full flex flex-col overflow-hidden pb-16">
-      {/* 导航 Header */}
-      <div className="flex justify-between items-center mb-10">
-        <nav className="flex items-center gap-10">
-          <button 
-            onClick={() => setView('project')} 
-            className={`text-4xl font-display transition-all ${view === 'project' ? 'text-ink' : 'text-ink/10 hover:text-ink/30'}`}
+  const navItems = [
+    { key: 'project' as const, label: 'Project' },
+    { key: 'terrain' as const, label: 'Terrain' },
+    { key: 'meditation' as const, label: 'Meditation' },
+    { key: 'traffic' as const, label: 'Traffic' },
+    { key: 'settings' as const, label: 'Settings' },
+  ];
+
+  const renderFullPage = (title: string, subtitle: string, actionLabel: string, onAction: () => void) => (
+    <div className="flex-1 flex flex-col overflow-hidden animate-fade-in">
+      <div className="relative h-full w-full rounded-[3rem] border border-black/5 bg-white/60 shadow-soft overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute -top-20 -right-16 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
+          <div className="absolute -bottom-24 -left-20 h-80 w-80 rounded-full bg-secondary/10 blur-3xl" />
+        </div>
+        <div className="relative h-full w-full flex flex-col items-center justify-center text-center px-8 md:px-20 gap-8">
+          <div className="text-[11px] uppercase tracking-[0.45em] text-gray-400">Home Module</div>
+          <h2 className="text-5xl md:text-7xl font-display text-ink tracking-tight">{title}</h2>
+          <p className="text-sm md:text-base font-serif italic text-gray-400 max-w-xl">{subtitle}</p>
+          <button
+            onClick={onAction}
+            className="px-8 py-4 rounded-full border border-black/5 bg-paper text-[10px] font-bold uppercase tracking-[0.35em] text-ink hover:border-accent/30 hover:text-accent transition-all"
           >
-            Project
-          </button>
-          <button 
-            onClick={() => setView('terrain')} 
-            className={`text-4xl font-display transition-all ${view === 'terrain' ? 'text-ink' : 'text-ink/10 hover:text-ink/30'}`}
-          >
-            Terrain
-          </button>
-        </nav>
-        
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={onClose} 
-            className="p-3 hover:bg-black/5 rounded-full transition-colors text-ink/30 hover:text-ink"
-            title="Return to Reading"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            {actionLabel}
           </button>
         </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden pb-12">
+      <div className="flex items-center justify-between mb-12">
+        <nav className="flex flex-wrap items-center gap-6 md:gap-10">
+          {navItems.map((item) => (
+            <button
+              key={item.key}
+              onClick={() => setView(item.key)}
+              className={`text-3xl md:text-4xl font-display transition-all ${
+                view === item.key ? 'text-ink' : 'text-ink/10 hover:text-ink/30'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
       </div>
 
       {/* 视图内容 */}
@@ -132,7 +152,7 @@ const FocusModule: React.FC<FocusModuleProps> = ({
             </div>
           </div>
         </div>
-      ) : (
+      ) : view === 'terrain' ? (
         <div className="flex-1 flex flex-col mb-4 overflow-hidden">
           <TerrainMap 
             lexicon={projectLexicon} 
@@ -143,6 +163,12 @@ const FocusModule: React.FC<FocusModuleProps> = ({
             isExpanded={true} 
           />
         </div>
+      ) : view === 'meditation' ? (
+        renderFullPage('Meditation', 'A quiet chamber for clarity, breath, and mental reset.', 'Enter', onOpenMeditation)
+      ) : view === 'traffic' ? (
+        renderFullPage('Traffic', 'Monitor intelligence flow, system load, and agent signals.', 'Open', onOpenTraffic)
+      ) : (
+        renderFullPage('Settings', 'Tune model tiers, depth, and personal reading protocols.', 'Configure', onOpenSettings)
       )}
     </div>
   );

@@ -65,7 +65,6 @@ const MarginApp: React.FC = () => {
   const [focusedSentenceId, setFocusedSentenceId] = useState<string | null>(null);
   const [activeToken, setActiveToken] = useState<WordOccurrence | null>(null);
 
-  const handleEnterReading = useCallback(() => setActiveView('reader'), []);
   const handleBookSelect = useCallback((book: Book) => {
     setActiveBook(book);
     setActiveView('reader');
@@ -333,7 +332,9 @@ const MarginApp: React.FC = () => {
               })
             }
             onImportClick={() => setIsImportOpen(true)}
-            onEnterReading={handleEnterReading}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onOpenTraffic={() => setIsTrafficOpen(true)}
+            onOpenMeditation={() => setIsMeditationOpen(true)}
           />
         </Suspense>
       ) : (

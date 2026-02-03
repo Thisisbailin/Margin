@@ -16,7 +16,9 @@ interface HomeProps {
   recordInteraction: (lemma: string, type: 'implicit' | 'explicit', weight: number, occurrenceId: string) => void;
   generateWordDefinition: (word: string) => Promise<string>;
   onImportClick: () => void;
-  onEnterReading: () => void;
+  onOpenSettings: () => void;
+  onOpenTraffic: () => void;
+  onOpenMeditation: () => void;
 }
 
 const Home: React.FC<HomeProps> = ({
@@ -33,29 +35,14 @@ const Home: React.FC<HomeProps> = ({
   recordInteraction,
   generateWordDefinition,
   onImportClick,
-  onEnterReading
+  onOpenSettings,
+  onOpenTraffic,
+  onOpenMeditation
 }) => {
-  const hasActiveBook = Boolean(activeBook);
-
   return (
     <div className="h-screen w-screen bg-paper text-ink font-sans overflow-hidden">
-      <div className="h-full w-full p-6 md:p-16">
-        <div className="max-w-[1400px] mx-auto h-full flex flex-col">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <div className="text-[10px] uppercase tracking-[0.4em] text-accent font-bold">Project Synthesis Engine</div>
-              <div className="text-xs font-serif italic text-gray-400 mt-2">Home Workspace</div>
-            </div>
-            {hasActiveBook && (
-              <button
-                onClick={onEnterReading}
-                className="px-5 py-3 rounded-full border border-black/5 bg-white text-[10px] font-bold uppercase tracking-widest text-ink hover:border-accent/30 hover:text-accent transition-all"
-              >
-                Continue Reading
-              </button>
-            )}
-          </div>
-
+      <div className="h-full w-full p-6 md:p-14">
+        <div className="max-w-[1500px] mx-auto h-full flex flex-col">
           <div className="flex-1 min-h-0">
             <FocusModule
               activeProject={activeProject}
@@ -71,7 +58,9 @@ const Home: React.FC<HomeProps> = ({
               recordInteraction={recordInteraction}
               generateWordDefinition={generateWordDefinition}
               onImportClick={onImportClick}
-              onClose={onEnterReading}
+              onOpenSettings={onOpenSettings}
+              onOpenTraffic={onOpenTraffic}
+              onOpenMeditation={onOpenMeditation}
             />
           </div>
         </div>
