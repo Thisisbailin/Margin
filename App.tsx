@@ -333,8 +333,8 @@ const MarginApp: React.FC = () => {
             }
             onImportClick={() => setIsImportOpen(true)}
             userId={user?.id}
-            proficiency={userProficiency}
-            onProficiencyChange={setUserProficiency}
+            onOpenTraffic={() => setIsTrafficOpen(true)}
+            onOpenSettings={() => setIsSettingsOpen(true)}
           />
         </Suspense>
       ) : (

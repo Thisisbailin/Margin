@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Project, Book, AgentMessage, LexiconItem, UserProficiency } from '../types';
+import { Project, Book, AgentMessage, LexiconItem } from '../types';
 import HomeProject from './home/HomeProject';
 import HomeTerrain from './home/HomeTerrain';
 import HomeMeditation from './home/HomeMeditation';
@@ -22,8 +22,8 @@ interface FocusModuleProps {
   // Added onImportClick to props interface
   onImportClick: () => void;
   userId?: string;
-  proficiency: UserProficiency;
-  onProficiencyChange: (p: UserProficiency) => void;
+  onOpenTraffic: () => void;
+  onOpenSettings: () => void;
 }
 
 const FocusModule: React.FC<FocusModuleProps> = ({
@@ -41,8 +41,8 @@ const FocusModule: React.FC<FocusModuleProps> = ({
   generateWordDefinition,
   onImportClick,
   userId,
-  proficiency,
-  onProficiencyChange
+  onOpenTraffic,
+  onOpenSettings
 }) => {
   const [view, setView] = useState<'project' | 'terrain' | 'meditation'>('project');
 
@@ -68,12 +68,7 @@ const FocusModule: React.FC<FocusModuleProps> = ({
             </button>
           ))}
         </nav>
-        <AccountMenu
-          userId={userId}
-          projectId={activeProject.id}
-          proficiency={proficiency}
-          onProficiencyChange={onProficiencyChange}
-        />
+        <AccountMenu onOpenTraffic={onOpenTraffic} onOpenSettings={onOpenSettings} />
       </div>
 
       {/* 视图内容 */}

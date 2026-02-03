@@ -1,5 +1,5 @@
 import React from 'react';
-import { Book, Project, AgentMessage, LexiconItem, UserProficiency } from './types';
+import { Book, Project, AgentMessage, LexiconItem } from './types';
 import FocusModule from './components/FocusModule';
 
 interface HomeProps {
@@ -17,8 +17,8 @@ interface HomeProps {
   generateWordDefinition: (word: string) => Promise<string>;
   onImportClick: () => void;
   userId?: string;
-  proficiency: UserProficiency;
-  onProficiencyChange: (p: UserProficiency) => void;
+  onOpenTraffic: () => void;
+  onOpenSettings: () => void;
 }
 
 const Home: React.FC<HomeProps> = ({
@@ -36,8 +36,8 @@ const Home: React.FC<HomeProps> = ({
   generateWordDefinition,
   onImportClick,
   userId,
-  proficiency,
-  onProficiencyChange
+  onOpenTraffic,
+  onOpenSettings
 }) => {
   return (
     <div className="h-screen w-screen bg-paper text-ink font-sans overflow-hidden">
@@ -59,8 +59,8 @@ const Home: React.FC<HomeProps> = ({
               generateWordDefinition={generateWordDefinition}
               onImportClick={onImportClick}
               userId={userId}
-              proficiency={proficiency}
-              onProficiencyChange={onProficiencyChange}
+              onOpenTraffic={onOpenTraffic}
+              onOpenSettings={onOpenSettings}
             />
           </div>
         </div>
