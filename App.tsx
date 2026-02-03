@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback, Suspense, lazy } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { SignedIn, SignedOut, SignInButton, useUser } from '@clerk/clerk-react';
 import { 
   Book, Project, Sentence, WordOccurrence, AgentMessage, 
@@ -10,6 +11,7 @@ import { MOCK_PROJECT } from './constants';
 import { streamAnnotation, generateWordDefinition, streamProjectChat } from './services/llmService';
 import { ingestArticleContent } from './services/articleService';
 import { uploadEpubToSupabase } from './services/supabaseService';
+import manifesto from './docs/margin-manifesto.md?raw';
 
 const HomeView = lazy(() => import('./Home'));
 const ReaderView = lazy(() => import('./ReaderPage'));
@@ -19,22 +21,59 @@ const TrafficDashboardModal = lazy(() => import('./components/TrafficDashboardMo
 const MeditationRoom = lazy(() => import('./components/MeditationRoom'));
 
 const LandingPage: React.FC = () => (
-  <div className="h-screen bg-paper flex flex-col items-center justify-center p-6 text-center animate-fade-in">
-    <div className="max-w-xl">
-      <h1 className="text-8xl font-display italic text-ink mb-8 tracking-tighter">Margin</h1>
-      <p className="text-xl font-serif text-gray-500 italic leading-relaxed mb-12">
-        "In the margins of what we read, we find the center of what we think."
-      </p>
-      <div className="flex flex-col gap-4 items-center">
-        <SignInButton mode="modal">
-          <button className="px-12 py-5 bg-ink text-white rounded-2xl font-bold uppercase tracking-widest hover:bg-black transition-all shadow-xl">
-            Begin Your Inquiry
-          </button>
-        </SignInButton>
-        <p className="text-[10px] uppercase tracking-[0.3em] text-gray-300 font-bold mt-4">
-          Powered by Qwen & Clerk
-        </p>
-      </div>
+  <div className="min-h-screen bg-paper text-ink overflow-y-auto relative">
+    <div className="absolute inset-0 pointer-events-none">
+      <div className="absolute -top-32 -left-20 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
+      <div className="absolute top-24 right-[-60px] h-80 w-80 rounded-full bg-secondary/10 blur-3xl" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(38,38,38,0.06),_transparent_45%)]" />
+    </div>
+
+    <div className="relative z-10 max-w-6xl mx-auto px-6 md:px-10 py-16">
+      <header className="grid gap-12 md:grid-cols-[1.1fr_0.9fr] items-center">
+        <div className="text-left">
+          <div className="text-[10px] uppercase tracking-[0.4em] text-accent font-bold mb-6">Margin Research Studio</div>
+          <h1 className="text-7xl md:text-8xl font-display italic text-ink mb-8 tracking-tighter">Margin</h1>
+          <p className="text-xl md:text-2xl font-serif text-gray-500 italic leading-relaxed mb-10">
+            "In the margins of what we read, we find the center of what we think."
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 items-start">
+            <SignInButton mode="modal">
+              <button className="px-10 py-4 bg-ink text-white rounded-2xl font-bold uppercase tracking-widest hover:bg-black transition-all shadow-xl">
+                Begin Your Inquiry
+              </button>
+            </SignInButton>
+            <div className="text-[10px] uppercase tracking-[0.3em] text-gray-300 font-bold flex items-center gap-2">
+              Powered by Qwen & Clerk
+            </div>
+          </div>
+        </div>
+        <div className="bg-white/70 border border-black/5 rounded-[2.5rem] p-8 md:p-10 shadow-soft text-left">
+          <div className="text-[10px] uppercase tracking-[0.35em] text-gray-400 font-bold mb-6">Focus</div>
+          <div className="space-y-5">
+            <div>
+              <div className="text-sm font-semibold text-ink">Between-Text Activation</div>
+              <div className="text-[11px] text-gray-400">Let relations, not rules, awaken language.</div>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-ink">Etymological Lineage</div>
+              <div className="text-[11px] text-gray-400">Words unfold as genealogies, not definitions.</div>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-ink">Dynamic Textuality</div>
+              <div className="text-[11px] text-gray-400">Meaning stays alive through movement and resonance.</div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <section className="mt-16 md:mt-20">
+        <div className="bg-white/70 border border-black/5 rounded-[2.5rem] p-8 md:p-12 shadow-soft">
+          <div className="text-[10px] uppercase tracking-[0.4em] text-accent font-bold mb-4">Margin Manifesto</div>
+          <div className="prose prose-sm md:prose-lg max-w-none font-serif text-ink">
+            <ReactMarkdown>{manifesto}</ReactMarkdown>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 );
