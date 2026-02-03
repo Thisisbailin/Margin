@@ -250,8 +250,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] bg-ink/30 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-      <div className="bg-paper w-full max-w-lg p-10 rounded-[2.5rem] shadow-float border border-black/5 flex flex-col gap-10 overflow-y-auto no-scrollbar max-h-[90vh]">
+    <div className="fixed inset-0 z-[100] bg-ink/30 backdrop-blur-sm flex items-center justify-center p-4 md:p-8 animate-fade-in">
+      <div className="bg-paper w-full max-w-5xl p-8 md:p-12 rounded-[3rem] shadow-float border border-black/5 flex flex-col gap-10 overflow-y-auto no-scrollbar max-h-[92vh]">
         <div className="flex justify-between items-center">
           <h2 className="font-display text-3xl text-ink italic">Configuration</h2>
           <button onClick={onClose} className="p-2 hover:bg-black/5 rounded-full transition-colors">
