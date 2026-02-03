@@ -1,12 +1,10 @@
 
 import React, { useState } from 'react';
-import { UserButton } from '@clerk/clerk-react';
 import { Project, Book, AgentMessage, LexiconItem, UserProficiency } from '../types';
 import HomeProject from './home/HomeProject';
 import HomeTerrain from './home/HomeTerrain';
 import HomeMeditation from './home/HomeMeditation';
-import HomeTraffic from './home/HomeTraffic';
-import HomeSettings from './home/HomeSettings';
+import AccountMenu from './account/AccountMenu';
 
 interface FocusModuleProps {
   activeProject: Project;
@@ -46,14 +44,12 @@ const FocusModule: React.FC<FocusModuleProps> = ({
   proficiency,
   onProficiencyChange
 }) => {
-  const [view, setView] = useState<'project' | 'terrain' | 'meditation' | 'traffic' | 'settings'>('project');
+  const [view, setView] = useState<'project' | 'terrain' | 'meditation'>('project');
 
   const navItems = [
     { key: 'project' as const, label: 'Project' },
     { key: 'terrain' as const, label: 'Terrain' },
     { key: 'meditation' as const, label: 'Meditation' },
-    { key: 'traffic' as const, label: 'Traffic' },
-    { key: 'settings' as const, label: 'Settings' },
   ];
 
   return (
@@ -72,9 +68,12 @@ const FocusModule: React.FC<FocusModuleProps> = ({
             </button>
           ))}
         </nav>
-        <div className="flex items-center gap-3">
-          <UserButton afterSignOutUrl="/" />
-        </div>
+        <AccountMenu
+          userId={userId}
+          projectId={activeProject.id}
+          proficiency={proficiency}
+          onProficiencyChange={onProficiencyChange}
+        />
       </div>
 
       {/* 视图内容 */}
@@ -97,21 +96,11 @@ const FocusModule: React.FC<FocusModuleProps> = ({
           recordInteraction={recordInteraction}
           generateWordDefinition={generateWordDefinition}
         />
-      ) : view === 'meditation' ? (
+      ) : (
         <HomeMeditation
           userId={userId}
           projectId={activeProject.id}
           bookId={activeBook?.id}
-        />
-      ) : view === 'traffic' ? (
-        <HomeTraffic
-          userId={userId}
-          projectId={activeProject.id}
-        />
-      ) : (
-        <HomeSettings
-          proficiency={proficiency}
-          onProficiencyChange={onProficiencyChange}
         />
       )}
     </div>

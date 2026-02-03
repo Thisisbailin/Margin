@@ -2,14 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { UserProficiency } from '../../types';
 import { DEFAULT_MODEL_SELECTION, loadModelSelection, saveModelSelection, type LLMModelTier } from '../../services/llmConfig';
 
-interface HomeSettingsProps {
+interface AccountSettingsProps {
   proficiency: UserProficiency;
   onProficiencyChange: (p: UserProficiency) => void;
   isActive?: boolean;
-  showClose?: boolean;
-  onClose?: () => void;
   className?: string;
-  panelClassName?: string;
 }
 
 type QwenModel = {
@@ -88,15 +85,7 @@ const getQwenTags = (model: QwenModel) => {
   return tags.slice(0, 4);
 };
 
-const HomeSettings: React.FC<HomeSettingsProps> = ({
-  proficiency,
-  onProficiencyChange,
-  isActive = true,
-  showClose = false,
-  onClose,
-  className,
-  panelClassName
-}) => {
+const AccountSettings: React.FC<AccountSettingsProps> = ({ proficiency, onProficiencyChange, isActive = true, className }) => {
   const [activeTier, setActiveTier] = useState<LLMModelTier>('L2');
   const [modelSelection, setModelSelection] = useState(loadModelSelection());
   const [availableModels, setAvailableModels] = useState<QwenModel[]>([]);
@@ -108,7 +97,6 @@ const HomeSettings: React.FC<HomeSettingsProps> = ({
     try {
       if (window.aistudio && window.aistudio.openSelectKey) {
         await window.aistudio.openSelectKey();
-        if (onClose) onClose();
       }
     } catch (err) {
       console.error('Failed to open key selector', err);
@@ -200,8 +188,7 @@ const HomeSettings: React.FC<HomeSettingsProps> = ({
     const tags = getQwenTags(model);
     const description = model.description || model.summary || model.display_name || model.name || '';
     const activeForTier = modelSelection[activeTier] === model.id;
-    const tierTags = (['L1', 'L2', 'L3'] as LLMModelTier[])
-      .filter((tier) => modelSelection[tier] === model.id);
+    const tierTags = (['L1', 'L2', 'L3'] as LLMModelTier[]).filter((tier) => modelSelection[tier] === model.id);
 
     return (
       <button
@@ -250,18 +237,11 @@ const HomeSettings: React.FC<HomeSettingsProps> = ({
   if (!isActive) return null;
 
   return (
-    <div className={`flex-1 flex flex-col overflow-hidden animate-fade-in ${className || ''}`.trim()}>
-      <div className={`flex-1 h-full w-full rounded-[3rem] border border-black/5 bg-white/60 shadow-soft overflow-y-auto no-scrollbar ${panelClassName || ''}`.trim()}>
-        <div className="h-full w-full p-8 md:p-12 flex flex-col gap-10">
-          <div className="flex justify-between items-center">
-            <h2 className="font-display text-3xl text-ink italic">Settings</h2>
-            {showClose && (
-              <button onClick={onClose} className="p-2 hover:bg-black/5 rounded-full transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            )}
-          </div>
+    <div className={className || ''}>
+      <h2 className="font-display text-2xl text-ink italic">Settings</h2>
 
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 mt-6">
+        <div className="space-y-6">
           <section className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-2 h-2 rounded-full bg-accent"></div>
@@ -287,93 +267,6 @@ const HomeSettings: React.FC<HomeSettingsProps> = ({
 
           <section className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full bg-secondary"></div>
-              <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">Intelligence Tiers</h3>
-            </div>
-            <div className="space-y-3">
-              {tiers.map((tier) => (
-                <div key={tier.level} className="flex items-center gap-5 p-4 bg-surface rounded-2xl border border-black/5 group hover:border-accent/30 transition-all">
-                  <div className={`w-10 h-10 rounded-xl ${tier.color} flex items-center justify-center font-bold text-xs`}>{tier.level}</div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-ink">{tier.name}</span>
-                      <span className="text-[9px] text-gray-400">{tier.model}</span>
-                    </div>
-                    <p className="text-[10px] text-gray-400 mt-0.5">{tier.usage}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="pt-2 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">Model Selection</div>
-                <button
-                  onClick={handleFetchModels}
-                  className="px-3 py-1.5 rounded-full border border-black/5 text-[10px] font-bold uppercase tracking-widest text-ink hover:border-accent/30 transition-all"
-                >
-                  {isLoadingModels ? 'Loading...' : '拉取模型'}
-                </button>
-              </div>
-              {modelFetchMessage && (
-                <div className={`text-[10px] ${modelFetchMessage.type === 'error' ? 'text-red-500' : 'text-emerald-500'}`}>
-                  {modelFetchMessage.text}
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                {(['L1', 'L2', 'L3'] as LLMModelTier[]).map((tier) => (
-                  <button
-                    key={tier}
-                    onClick={() => setActiveTier(tier)}
-                    className={`px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-all ${
-                      activeTier === tier ? 'bg-ink text-white border-ink' : 'bg-surface border-transparent text-gray-500 hover:border-black/10'
-                    }`}
-                  >
-                    {tier}
-                  </button>
-                ))}
-                <div className="text-[10px] text-gray-400 ml-auto hidden md:block">
-                  L1: {modelSelection.L1 || '未设置'} · L2: {modelSelection.L2 || '未设置'} · L3: {modelSelection.L3 || '未设置'}
-                </div>
-              </div>
-              {availableModels.length === 0 ? (
-                <div className="text-[10px] text-gray-400 bg-surface rounded-2xl border border-black/5 p-4">
-                  暂无模型，请先点击“拉取模型”。默认会使用 Qwen Plus / Qwen Max 组合。
-                </div>
-              ) : (
-                <div className="space-y-5">
-                  {qwenGroups.map((group) => {
-                    const isCollapsed = collapsedGroups[group.key] ?? true;
-                    return (
-                      <div key={group.key} className="space-y-2">
-                        <button
-                          type="button"
-                          onClick={() => setCollapsedGroups((prev) => ({ ...prev, [group.key]: !prev[group.key] }))}
-                          className="w-full flex items-center justify-between text-left"
-                          aria-expanded={!isCollapsed}
-                        >
-                          <div className="flex items-center gap-3">
-                            <svg className={`w-3 h-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M9 18l6-6-6-6" />
-                            </svg>
-                            <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400">{group.label}</div>
-                          </div>
-                          <span className="text-[9px] text-gray-400">{group.items.length} models</span>
-                        </button>
-                        {!isCollapsed && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {group.items.map((model) => renderModelCard(model))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="space-y-4">
-            <div className="flex items-center gap-3">
               <div className="w-2 h-2 rounded-full bg-accent/30"></div>
               <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">Analysis Depth</h3>
             </div>
@@ -391,14 +284,104 @@ const HomeSettings: React.FC<HomeSettingsProps> = ({
               ))}
             </div>
           </section>
+        </div>
 
-          <p className="text-center text-[9px] text-gray-300 font-serif italic">
-            v2.5 Hybrid Intelligence Architecture
-          </p>
+        <div className="space-y-6">
+          <section className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-secondary"></div>
+              <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">Intelligence Tiers</h3>
+            </div>
+            <div className="space-y-3">
+              {tiers.map((tier) => (
+                <div key={tier.level} className="flex items-center gap-5 p-4 bg-surface rounded-2xl border border-black/5 group hover:border-accent/30 transition-all">
+                  <div className={`w-10 h-10 rounded-xl ${tier.color} flex items-center justify-center font-bold text-xs`}>{tier.level}</div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-ink">{tier.name}</span>
+                      <span className="text-[9px] text-gray-400">{tier.model}</span>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-0.5">{tier.usage}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">Model Selection</div>
+              <button
+                onClick={handleFetchModels}
+                className="px-3 py-1.5 rounded-full border border-black/5 text-[10px] font-bold uppercase tracking-widest text-ink hover:border-accent/30 transition-all"
+              >
+                {isLoadingModels ? 'Loading...' : '拉取模型'}
+              </button>
+            </div>
+            {modelFetchMessage && (
+              <div className={`text-[10px] ${modelFetchMessage.type === 'error' ? 'text-red-500' : 'text-emerald-500'}`}>
+                {modelFetchMessage.text}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              {(['L1', 'L2', 'L3'] as LLMModelTier[]).map((tier) => (
+                <button
+                  key={tier}
+                  onClick={() => setActiveTier(tier)}
+                  className={`px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-all ${
+                    activeTier === tier ? 'bg-ink text-white border-ink' : 'bg-surface border-transparent text-gray-500 hover:border-black/10'
+                  }`}
+                >
+                  {tier}
+                </button>
+              ))}
+              <div className="text-[10px] text-gray-400 ml-auto hidden md:block">
+                L1: {modelSelection.L1 || '未设置'} · L2: {modelSelection.L2 || '未设置'} · L3: {modelSelection.L3 || '未设置'}
+              </div>
+            </div>
+            {availableModels.length === 0 ? (
+              <div className="text-[10px] text-gray-400 bg-surface rounded-2xl border border-black/5 p-4">
+                暂无模型，请先点击“拉取模型”。默认会使用 Qwen Plus / Qwen Max 组合。
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {qwenGroups.map((group) => {
+                  const isCollapsed = collapsedGroups[group.key] ?? true;
+                  return (
+                    <div key={group.key} className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => setCollapsedGroups((prev) => ({ ...prev, [group.key]: !prev[group.key] }))}
+                        className="w-full flex items-center justify-between text-left"
+                        aria-expanded={!isCollapsed}
+                      >
+                        <div className="flex items-center gap-3">
+                          <svg className={`w-3 h-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M9 18l6-6-6-6" />
+                          </svg>
+                          <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400">{group.label}</div>
+                        </div>
+                        <span className="text-[9px] text-gray-400">{group.items.length} models</span>
+                      </button>
+                      {!isCollapsed && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {group.items.map((model) => renderModelCard(model))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         </div>
       </div>
+
+      <p className="text-center text-[9px] text-gray-300 font-serif italic mt-8">
+        v2.5 Hybrid Intelligence Architecture
+      </p>
     </div>
   );
 };
 
-export default HomeSettings;
+export default AccountSettings;
