@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '@clerk/clerk-react';
 import { UserProficiency } from '../../types';
-import { DEFAULT_MODEL_SELECTION, loadModelSelection, saveModelSelection, type LLMModelTier } from '../../services/llmConfig';
+import { DEFAULT_AGENT_MODEL, loadDefaultAgentModel, saveDefaultAgentModel } from '../../services/agentConfig';
+import { fetchClerkToken } from '../../services/clerkToken';
 
 interface AccountSettingsProps {
   proficiency: UserProficiency;
@@ -86,8 +88,8 @@ const getQwenTags = (model: QwenModel) => {
 };
 
 const AccountSettings: React.FC<AccountSettingsProps> = ({ proficiency, onProficiencyChange, isActive = true, className }) => {
-  const [activeTier, setActiveTier] = useState<LLMModelTier>('L2');
-  const [modelSelection, setModelSelection] = useState(loadModelSelection());
+  const { getToken } = useAuth();
+  const [defaultModel, setDefaultModel] = useState(loadDefaultAgentModel());
   const [availableModels, setAvailableModels] = useState<QwenModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelFetchMessage, setModelFetchMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
@@ -102,12 +104,6 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ proficiency, onProfic
       console.error('Failed to open key selector', err);
     }
   };
-
-  const tiers = [
-    { level: 'L1' as const, name: 'Lexical Base', model: modelSelection.L1 || DEFAULT_MODEL_SELECTION.L1 || 'qwen-plus', usage: 'Terrain 词义查询', color: 'bg-green-500/10 text-green-600' },
-    { level: 'L2' as const, name: 'Contextual Margin', model: modelSelection.L2 || DEFAULT_MODEL_SELECTION.L2 || 'qwen-plus', usage: '阅读实时解析', color: 'bg-accent/10 text-accent' },
-    { level: 'L3' as const, name: 'Synthesis Engine', model: modelSelection.L3 || DEFAULT_MODEL_SELECTION.L3 || 'qwen-max', usage: '项目深度研究', color: 'bg-blue-500/10 text-blue-600' },
-  ];
 
   const qwenGroups = useMemo(() => {
     const groups = new Map<string, { key: string; label: string; tone: string; items: QwenModel[] }>();
@@ -129,36 +125,14 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ proficiency, onProfic
     });
   }, [availableModels]);
 
-  const applyDefaultSelection = (prev: typeof modelSelection, models: QwenModel[]) => {
-    if (!models.length) return prev;
-    const ids = new Set(models.map((m) => m.id));
-    const findByHints = (hints: string[]) => {
-      const lowerHints = hints.map((h) => h.toLowerCase());
-      const found = models.find((m) => lowerHints.some((h) => m.id.toLowerCase().includes(h)));
-      return found?.id;
-    };
-
-    const pick = (tier: LLMModelTier, hints: string[], fallback?: string) => {
-      const current = prev[tier];
-      if (current && ids.has(current)) return current;
-      const hinted = findByHints(hints);
-      if (hinted) return hinted;
-      if (fallback && ids.has(fallback)) return fallback;
-      return models[0]?.id || fallback || '';
-    };
-
-    return {
-      L1: pick('L1', ['qwen-plus', 'plus', 'turbo'], DEFAULT_MODEL_SELECTION.L1),
-      L2: pick('L2', ['qwen-plus', 'plus', 'turbo'], DEFAULT_MODEL_SELECTION.L2),
-      L3: pick('L3', ['qwen-max', 'max', 'pro'], DEFAULT_MODEL_SELECTION.L3),
-    };
-  };
-
   const handleFetchModels = async () => {
     setIsLoadingModels(true);
     setModelFetchMessage(null);
     try {
-      const response = await fetch('/api/llm/models', { method: 'GET' });
+      const token = await fetchClerkToken(getToken);
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const response = await fetch('/api/llm/models', { method: 'GET', headers });
       if (!response.ok) {
         const message = await response.text();
         throw new Error(message || `模型拉取失败 (${response.status})`);
@@ -175,7 +149,10 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ proficiency, onProfic
         type: 'success',
         text: models.length ? `获取成功，${models.length} 个模型` : '获取成功，但返回为空',
       });
-      setModelSelection((prev) => applyDefaultSelection(prev, models));
+      if (models.length && !models.find((m) => m.id === defaultModel)) {
+        const fallback = models.find((m) => m.id.includes(DEFAULT_AGENT_MODEL))?.id || models[0].id;
+        setDefaultModel(fallback);
+      }
     } catch (err: any) {
       setModelFetchMessage({ type: 'error', text: err?.message || '拉取失败' });
     } finally {
@@ -187,16 +164,15 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ proficiency, onProfic
     const category = getQwenCategory(model);
     const tags = getQwenTags(model);
     const description = model.description || model.summary || model.display_name || model.name || '';
-    const activeForTier = modelSelection[activeTier] === model.id;
-    const tierTags = (['L1', 'L2', 'L3'] as LLMModelTier[]).filter((tier) => modelSelection[tier] === model.id);
+    const isDefault = defaultModel === model.id;
 
     return (
       <button
         key={model.id}
         type="button"
-        onClick={() => setModelSelection((prev) => ({ ...prev, [activeTier]: model.id }))}
+        onClick={() => setDefaultModel(model.id)}
         className={`text-left rounded-2xl border p-4 bg-surface transition ${
-          activeForTier ? 'border-accent shadow-[0_0_0_1px_rgba(230,90,60,0.25)]' : 'border-black/5 hover:border-accent/30'
+          isDefault ? 'border-accent shadow-[0_0_0_1px_rgba(230,90,60,0.25)]' : 'border-black/5 hover:border-accent/30'
         }`}
       >
         <div className="flex items-center justify-between gap-3">
@@ -206,18 +182,18 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ proficiency, onProfic
         {description && (
           <div className="text-[10px] text-gray-500 mt-2 line-clamp-2">{description}</div>
         )}
-        {(tags.length > 0 || tierTags.length > 0) && (
+        {(tags.length > 0 || isDefault) && (
           <div className="mt-2 flex flex-wrap gap-2">
             {tags.map((tag) => (
               <span key={tag} className="text-[9px] px-2 py-0.5 rounded-full border border-black/5 text-gray-400">
                 {tag}
               </span>
             ))}
-            {tierTags.map((tier) => (
-              <span key={tier} className="text-[9px] px-2 py-0.5 rounded-full bg-accent/10 text-accent">
-                {tier}
+            {isDefault && (
+              <span className="text-[9px] px-2 py-0.5 rounded-full bg-accent/10 text-accent">
+                DEFAULT
               </span>
-            ))}
+            )}
           </div>
         )}
       </button>
@@ -225,8 +201,8 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ proficiency, onProfic
   };
 
   useEffect(() => {
-    saveModelSelection(modelSelection);
-  }, [modelSelection]);
+    saveDefaultAgentModel(defaultModel);
+  }, [defaultModel]);
 
   useEffect(() => {
     if (isActive && !availableModels.length) {
@@ -249,12 +225,12 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ proficiency, onProfic
             </div>
             <div className="bg-surface p-6 rounded-3xl border border-black/5">
               <div className="flex justify-between items-center mb-4">
-                <span className="text-xs font-serif italic text-ink/70">API Protocol</span>
-                <span className="text-[9px] font-bold text-accent uppercase tracking-widest">Active via Cloudflare</span>
+                <span className="text-xs font-serif italic text-ink/70">Agent Orchestration</span>
+                <span className="text-[9px] font-bold text-accent uppercase tracking-widest">Active</span>
               </div>
               <div className="flex items-center justify-between text-[10px] text-gray-400 mb-3">
-                <span className="uppercase tracking-[0.2em] font-bold">Provider</span>
-                <span className="text-ink font-serif italic">Qwen (DashScope)</span>
+                <span className="uppercase tracking-[0.2em] font-bold">Default Model</span>
+                <span className="text-ink font-serif italic">{defaultModel || DEFAULT_AGENT_MODEL}</span>
               </div>
               <button
                 onClick={handleKeySelection}
@@ -288,27 +264,6 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ proficiency, onProfic
 
         <div className="space-y-6">
           <section className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full bg-secondary"></div>
-              <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">Intelligence Tiers</h3>
-            </div>
-            <div className="space-y-3">
-              {tiers.map((tier) => (
-                <div key={tier.level} className="flex items-center gap-5 p-4 bg-surface rounded-2xl border border-black/5 group hover:border-accent/30 transition-all">
-                  <div className={`w-10 h-10 rounded-xl ${tier.color} flex items-center justify-center font-bold text-xs`}>{tier.level}</div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-ink">{tier.name}</span>
-                      <span className="text-[9px] text-gray-400">{tier.model}</span>
-                    </div>
-                    <p className="text-[10px] text-gray-400 mt-0.5">{tier.usage}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">Model Selection</div>
               <button
@@ -323,25 +278,12 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ proficiency, onProfic
                 {modelFetchMessage.text}
               </div>
             )}
-            <div className="flex items-center gap-2">
-              {(['L1', 'L2', 'L3'] as LLMModelTier[]).map((tier) => (
-                <button
-                  key={tier}
-                  onClick={() => setActiveTier(tier)}
-                  className={`px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-all ${
-                    activeTier === tier ? 'bg-ink text-white border-ink' : 'bg-surface border-transparent text-gray-500 hover:border-black/10'
-                  }`}
-                >
-                  {tier}
-                </button>
-              ))}
-              <div className="text-[10px] text-gray-400 ml-auto hidden md:block">
-                L1: {modelSelection.L1 || '未设置'} · L2: {modelSelection.L2 || '未设置'} · L3: {modelSelection.L3 || '未设置'}
-              </div>
+            <div className="text-[10px] text-gray-400">
+              Default: <span className="text-ink">{defaultModel || DEFAULT_AGENT_MODEL}</span>
             </div>
             {availableModels.length === 0 ? (
               <div className="text-[10px] text-gray-400 bg-surface rounded-2xl border border-black/5 p-4">
-                暂无模型，请先点击“拉取模型”。默认会使用 Qwen Plus / Qwen Max 组合。
+                暂无模型，请先点击“拉取模型”。默认使用 {DEFAULT_AGENT_MODEL}。
               </div>
             ) : (
               <div className="space-y-5">

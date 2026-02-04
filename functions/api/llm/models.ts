@@ -1,3 +1,5 @@
+import { requireUser } from "../library/_auth";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -50,6 +52,9 @@ export const onRequest = async ({ request, env }: { request: Request; env: Recor
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   }
+
+  const auth = await requireUser(request, env);
+  if ("error" in auth) return auth.error;
 
   const apiKey = env.QWEN_API_KEY || env.VITE_QWEN_API_KEY || env.DASHSCOPE_API_KEY;
   if (!apiKey) {

@@ -18,7 +18,6 @@ interface FocusModuleProps {
   readingProgress: number;
   recordInteraction: (lemma: string, type: 'implicit' | 'explicit', weight: number, occurrenceId?: string) => void;
   updateLexeme: (lemma: string, updates: Partial<LexemeStat>) => void;
-  generateWordDefinition: (word: string) => Promise<string>;
   onImportClick: () => void;
   userId?: string;
   onOpenTraffic: () => void;
@@ -38,7 +37,6 @@ const FocusModule: React.FC<FocusModuleProps> = ({
   readingProgress,
   recordInteraction,
   updateLexeme,
-  generateWordDefinition,
   onImportClick,
   userId,
   onOpenTraffic,
@@ -89,7 +87,6 @@ const FocusModule: React.FC<FocusModuleProps> = ({
           readingProgress={readingProgress}
           recordInteraction={recordInteraction}
           updateLexeme={updateLexeme}
-          generateWordDefinition={generateWordDefinition}
         />
       ) : (
         <HomeMeditation userId={userId} projectId={activeProject.id} bookId={activeDocument?.id} />

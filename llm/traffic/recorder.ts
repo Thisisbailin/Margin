@@ -84,6 +84,7 @@ const recordToSupabase = async (record: TrafficRecord, config: TrafficRecorderCo
   const endpoint = `${base}/rest/v1/${table}`;
   const payload = {
     id: record.id,
+    created_at: new Date(record.startedAt).toISOString(),
     started_at: record.startedAt,
     ended_at: record.endedAt,
     latency_ms: record.latencyMs,

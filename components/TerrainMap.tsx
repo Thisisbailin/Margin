@@ -5,7 +5,6 @@ interface TerrainMapProps {
   lexicon: LexemeEntry[];
   bookProgress: number;
   onUpdateLexicon: (lemma: string, updates: Partial<LexemeStat>) => void;
-  onGenerateDefinition: (word: string) => Promise<string>;
   onReviewLemma: (lemma: string) => void;
   onNavigateToContext: (bookId: string, sentenceId: string, wordId: string) => void;
   isExpanded?: boolean;
@@ -15,7 +14,6 @@ const TerrainMap: React.FC<TerrainMapProps> = ({
   lexicon,
   bookProgress,
   onUpdateLexicon,
-  onGenerateDefinition,
   onReviewLemma,
   isExpanded = false
 }) => {
@@ -25,7 +23,6 @@ const TerrainMap: React.FC<TerrainMapProps> = ({
   const [mode, setMode] = useState<'browse' | 'study'>('browse');
   const [sessionQueue, setSessionQueue] = useState<LexemeEntry[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [definingWord, setDefiningWord] = useState<string | null>(null);
 
   const landscapeData = useMemo(() => {
     const total = lexicon.length;
@@ -90,14 +87,6 @@ const TerrainMap: React.FC<TerrainMapProps> = ({
 
   const activeZoneWords = selectedZone ? (landscapeData.zones as any)[selectedZone] : [];
 
-  const handleFetchDefinition = async (lemma: string) => {
-    if (definingWord) return;
-    setDefiningWord(lemma);
-    const def = await onGenerateDefinition(lemma);
-    onUpdateLexicon(lemma, { definition: def });
-    setDefiningWord(null);
-  };
-
   const startStudy = (words: LexemeEntry[]) => {
     if (words.length === 0) return;
     setSessionQueue(words.sort(() => Math.random() - 0.5).slice(0, 10));
@@ -141,13 +130,7 @@ const TerrainMap: React.FC<TerrainMapProps> = ({
             {current.definition ? (
               <p className="text-xl font-serif text-ink/70 italic leading-relaxed">"{current.definition}"</p>
             ) : (
-              <button
-                onClick={() => handleFetchDefinition(current.lemma)}
-                className="text-accent hover:text-accent-hover text-sm font-bold uppercase tracking-widest transition-all"
-                disabled={definingWord === current.lemma}
-              >
-                {definingWord === current.lemma ? 'Retrieving L1 Definition...' : 'Generate L1 Definition'}
-              </button>
+              <p className="text-sm font-serif italic text-gray-400">Definition will be composed by the Agent layer.</p>
             )}
           </div>
 
@@ -244,7 +227,6 @@ const TerrainMap: React.FC<TerrainMapProps> = ({
                 r={d.size / 6}
                 className={`transition-all duration-1000 cursor-pointer ${d.color} ${selectedZone && !activeZoneWords.includes(d) ? 'opacity-0 blur-xl' : ''}`}
                 style={{ opacity: d.opacity }}
-                onClick={() => d.isDiscovered && handleFetchDefinition(d.lemma)}
               >
                 <title>{d.lemma}</title>
               </circle>
@@ -304,7 +286,6 @@ const TerrainMap: React.FC<TerrainMapProps> = ({
                   <div
                     key={word.lemma}
                     className="flex items-center justify-between p-4 hover:bg-accent/5 rounded-[1.5rem] group transition-all cursor-pointer"
-                    onClick={() => handleFetchDefinition(word.lemma)}
                   >
                     <div className="flex-1">
                       <div className="flex items-baseline gap-3">

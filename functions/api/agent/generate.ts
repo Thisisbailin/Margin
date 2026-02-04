@@ -1,4 +1,5 @@
 import { createToolRegistry, createArchiveTools, runAgent, type AgentRequest } from "../../../agents";
+import { requireUser } from "../library/_auth";
 
 const jsonResponse = (payload: unknown, init?: ResponseInit) => {
   return new Response(JSON.stringify(payload), {
@@ -53,6 +54,9 @@ export const onRequest = async ({ request, env }: { request: Request; env: Recor
   if (request.method !== "POST") {
     return jsonResponse({ error: "Method Not Allowed" }, { status: 405, headers: corsHeaders });
   }
+
+  const auth = await requireUser(request, env);
+  if ("error" in auth) return auth.error;
 
   const body = await parseBody(request);
   if (!body || !body.task) {

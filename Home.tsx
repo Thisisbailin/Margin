@@ -15,7 +15,6 @@ interface HomeProps {
   readingProgress: number;
   recordInteraction: (lemma: string, type: 'implicit' | 'explicit', weight: number, occurrenceId?: string) => void;
   updateLexeme: (lemma: string, updates: Partial<LexemeStat>) => void;
-  generateWordDefinition: (word: string) => Promise<string>;
   onImportClick: () => void;
   userId?: string;
   onOpenTraffic: () => void;
@@ -35,7 +34,6 @@ const Home: React.FC<HomeProps> = ({
   readingProgress,
   recordInteraction,
   updateLexeme,
-  generateWordDefinition,
   onImportClick,
   userId,
   onOpenTraffic,
@@ -59,7 +57,6 @@ const Home: React.FC<HomeProps> = ({
               readingProgress={readingProgress}
               recordInteraction={recordInteraction}
               updateLexeme={updateLexeme}
-              generateWordDefinition={generateWordDefinition}
               onImportClick={onImportClick}
               userId={userId}
               onOpenTraffic={onOpenTraffic}

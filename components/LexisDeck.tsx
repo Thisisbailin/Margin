@@ -6,7 +6,6 @@ interface LexisDeckProps {
   lexicon: LexemeEntry[];
   bookProgress: number; 
   onUpdateLexicon: (lemma: string, updates: Partial<LexemeStat>) => void;
-  onGenerateDefinition: (word: string) => Promise<string>;
   onNavigateToContext: (bookId: string, sentenceId: string, wordId: string) => void;
   isExpanded?: boolean; 
 }
@@ -15,7 +14,6 @@ const LexisDeck: React.FC<LexisDeckProps> = ({
   lexicon, 
   bookProgress,
   onUpdateLexicon, 
-  onGenerateDefinition,
   isExpanded = false
 }) => {
   const [view, setView] = useState<TopographyView>('reality');

@@ -1,5 +1,6 @@
 import { iterableToSSEStream } from "../../../llm";
 import { streamAgent, type AgentRequest } from "../../../agents";
+import { requireUser } from "../library/_auth";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,6 +48,9 @@ export const onRequest = async ({ request, env }: { request: Request; env: Recor
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   }
+
+  const auth = await requireUser(request, env);
+  if ("error" in auth) return auth.error;
 
   const body = await parseBody(request);
   if (!body || !body.task) {

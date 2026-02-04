@@ -2,10 +2,8 @@ import { AgentRequest, AgentTask } from "./types";
 import { LLMMessage } from "../llm";
 import { ToolDefinition, ToolResult } from "./tools";
 
-const defaultModelForTask = (task: AgentTask): string => {
-  if (task === "lexicon") return "L1";
-  if (task === "project") return "L3";
-  return "L2";
+const defaultModelForTask = (_task: AgentTask): string => {
+  return "";
 };
 
 const stringify = (value: unknown): string => {
@@ -49,11 +47,12 @@ export const buildMessages = (request: AgentRequest): { messages: LLMMessage[]; 
     const surrounding = getContextValue(context, "surroundingContext") || targetText;
     const mastery = getContextValue(context, "targetMastery");
     const adaptation = mastery ? `当前掌握度: ${mastery}` : "";
+    const instruction = input ? `\n用户指令: ${input}` : "";
 
     prompt = `你是一款名为 Margin 的 AI 深度阅读助手。
 上下文: 《${documentTitle}》
 ${adaptation}
-指令: 针对语境 "${surrounding}" 中的 "${targetText}" 进行详细解读。`;
+指令: 针对语境 "${surrounding}" 中的 "${targetText}" 进行详细解读。${instruction}`;
   }
 
   if (task === "project") {

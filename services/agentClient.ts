@@ -1,19 +1,22 @@
-export type LLMRole = "system" | "user" | "assistant";
+export type AgentRole = "system" | "user" | "assistant";
 
-export type LLMMessage = {
-  role: LLMRole;
+export type AgentMessage = {
+  role: AgentRole;
   content: string;
 };
 
-export type LLMRequestPayload = {
-  model?: string; // model tier (L1/L2/L3) or concrete model
-  messages: LLMMessage[];
+export type AgentRequest = {
+  task: "annotation" | "project" | "lexicon" | "freeform";
+  input?: string;
+  context?: Record<string, unknown>;
+  history?: AgentMessage[];
+  messages?: AgentMessage[];
   temperature?: number;
   maxTokens?: number;
   metadata?: Record<string, string>;
 };
 
-export type LLMStreamChunk = {
+export type AgentStreamChunk = {
   text?: string;
   usage?: {
     promptTokens: number;
@@ -21,6 +24,13 @@ export type LLMStreamChunk = {
     totalTokens: number;
   };
   raw?: unknown;
+};
+
+export type AgentResponse = {
+  task: string;
+  model?: string;
+  text: string;
+  usage?: AgentStreamChunk["usage"];
 };
 
 const parseErrorText = async (response: Response): Promise<string> => {
@@ -35,11 +45,11 @@ const parseErrorText = async (response: Response): Promise<string> => {
   return response.statusText || "Unknown error";
 };
 
-export const generateLLM = async (payload: LLMRequestPayload, token?: string) => {
+export const runAgent = async (payload: AgentRequest, token?: string): Promise<AgentResponse> => {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch("/api/llm/generate", {
+  const response = await fetch("/api/agent/generate", {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -50,18 +60,18 @@ export const generateLLM = async (payload: LLMRequestPayload, token?: string) =>
     throw new Error(message);
   }
 
-  return (await response.json()) as { text: string } & LLMStreamChunk;
+  return (await response.json()) as AgentResponse;
 };
 
-export const streamLLM = async (
-  payload: LLMRequestPayload,
-  onUpdate?: (fullText: string, chunk: LLMStreamChunk) => void,
+export const streamAgent = async (
+  payload: AgentRequest,
+  onUpdate?: (fullText: string, chunk: AgentStreamChunk) => void,
   token?: string
 ): Promise<string> => {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch("/api/llm/stream", {
+  const response = await fetch("/api/agent/stream", {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -87,7 +97,7 @@ export const streamLLM = async (
     const data = trimmed.slice(5).trim();
     if (data === "[DONE]") return true;
     try {
-      const chunk = JSON.parse(data) as LLMStreamChunk;
+      const chunk = JSON.parse(data) as AgentStreamChunk;
       if (chunk.text) {
         fullText += chunk.text;
         onUpdate?.(fullText, chunk);

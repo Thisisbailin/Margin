@@ -122,29 +122,41 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
           options?.compact ? 'mb-4 text-sm md:text-base leading-relaxed' : 'mb-8 prose-sm md:prose-lg'
         } ${options?.tone === 'note' ? 'text-ink/70' : 'text-ink'}`}
       >
-        {block.spans.map((span) => (
-          <span
-            key={span.id}
-            onClick={() => onSpanClick(span)}
-            className={`inline transition-all duration-500 rounded-sm cursor-pointer px-1 -mx-1 py-0.5 ${
-              focusedSpanId === span.id ? 'bg-accent/5 ring-1 ring-accent/10' : 'hover:bg-black/5'
-            }`}
-          >
-            {span.tokens.map((token) => (
-              <React.Fragment key={token.id}>
-                <ReaderToken
-                  token={token}
-                  masteryScore={getMasteryScore(token.lemma)}
-                  onClick={onTokenClick}
-                  isActive={activeToken?.id === token.id}
-                  isSentenceFocused={focusedSpanId === span.id}
-                  isZenMode={isZenMode}
-                />
-                {' '}
-              </React.Fragment>
-            ))}
-          </span>
-        ))}
+        {block.spans.map((span) => {
+          const isFocused = focusedSpanId === span.id;
+          const showTokens = isFocused && !isZenMode;
+
+          return (
+            <span
+              key={span.id}
+              onClick={() => onSpanClick(span)}
+              className={`inline transition-all duration-500 rounded-sm cursor-pointer px-1 -mx-1 py-0.5 ${
+                isFocused ? 'bg-accent/5 ring-1 ring-accent/10' : 'hover:bg-black/5'
+              }`}
+            >
+              {showTokens ? (
+                span.tokens.map((token) => (
+                  <React.Fragment key={token.id}>
+                    <ReaderToken
+                      token={token}
+                      masteryScore={getMasteryScore(token.lemma)}
+                      onClick={onTokenClick}
+                      isActive={activeToken?.id === token.id}
+                      isSentenceFocused={isFocused}
+                      isZenMode={isZenMode}
+                    />
+                    {' '}
+                  </React.Fragment>
+                ))
+              ) : (
+                <>
+                  {span.text}
+                  {' '}
+                </>
+              )}
+            </span>
+          );
+        })}
       </div>
     );
   };

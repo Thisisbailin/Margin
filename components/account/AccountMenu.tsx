@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { useClerk, useUser } from '@clerk/clerk-react';
+import { useAuth, useClerk, useUser } from '@clerk/clerk-react';
 import AboutModal from './AboutModal';
 import { uploadAvatarToSupabase } from '../../services/supabaseService';
+import { fetchClerkToken } from '../../services/clerkToken';
 
 interface AccountMenuProps {
   onOpenTraffic: () => void;
@@ -11,6 +12,7 @@ interface AccountMenuProps {
 const AccountMenu: React.FC<AccountMenuProps> = ({ onOpenTraffic, onOpenSettings }) => {
   const { user } = useUser();
   const { signOut } = useClerk();
+  const { getToken } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -53,7 +55,12 @@ const AccountMenu: React.FC<AccountMenuProps> = ({ onOpenTraffic, onOpenSettings
     if (!user) return;
     setIsUploading(true);
     try {
-      const { publicUrl, path } = await uploadAvatarToSupabase(file, user.id);
+      const token = await fetchClerkToken(getToken);
+      if (!token) {
+        alert('请先登录再上传头像。');
+        return;
+      }
+      const { publicUrl, path } = await uploadAvatarToSupabase(file, token);
       if (publicUrl) {
         setAvatarUrl(publicUrl);
         if (typeof user.update === 'function') {

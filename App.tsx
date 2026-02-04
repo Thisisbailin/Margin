@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, Suspense, lazy } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { SignedIn, SignedOut, SignInButton, useUser } from '@clerk/clerk-react';
+import { SignedIn, SignedOut, SignInButton, useAuth, useUser } from '@clerk/clerk-react';
 import {
   Document,
   Project,
@@ -16,10 +16,11 @@ import {
   DocumentType
 } from './types';
 import { MOCK_PROJECT } from './constants';
-import { streamAnnotation, generateWordDefinition, streamProjectChat } from './services/llmService';
+import { streamAnnotation, streamProjectChat } from './services/llmService';
 import { fetchProjectSnapshot, upsertDocumentSnapshot, upsertProjectSnapshot, uploadEpubToSupabase } from './services/supabaseService';
 import { buildDocumentFromBlocks, buildProjectIndexes } from './services/documentBuilder';
 import type { ParsedEpub } from './services/epubService';
+import { fetchClerkToken } from './services/clerkToken';
 import manifesto from './docs/margin-manifesto.md?raw';
 
 const HomeView = lazy(() => import('./Home'));
@@ -106,6 +107,7 @@ const buildLexemeEntries = (project: Project): LexemeEntry[] => {
 
 const MarginApp: React.FC = () => {
   const { user } = useUser();
+  const { getToken } = useAuth();
   const [leftPanelState, setLeftPanelState] = useState<PanelState>('collapsed');
   const [rightPanelState, setRightPanelState] = useState<PanelState>('collapsed');
   const [isZenMode, setIsZenMode] = useState(true);
@@ -130,12 +132,22 @@ const MarginApp: React.FC = () => {
   const [focusedSpanId, setFocusedSpanId] = useState<string | null>(null);
   const [activeToken, setActiveToken] = useState<Token | null>(null);
 
+  const getAuthToken = useCallback(async () => {
+    try {
+      return await fetchClerkToken(getToken);
+    } catch {
+      return null;
+    }
+  }, [getToken]);
+
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
 
     const hydrateFromSupabase = async () => {
-      const snapshot = await fetchProjectSnapshot(user.id);
+      const token = await getAuthToken();
+      if (!token) return;
+      const snapshot = await fetchProjectSnapshot(token);
       if (cancelled || !snapshot) return;
 
       const { project, documents } = snapshot;
@@ -168,7 +180,7 @@ const MarginApp: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [user?.id, getAuthToken]);
 
   const handleDocumentSelect = useCallback((document: Document) => {
     setActiveDocument(document);
@@ -271,6 +283,11 @@ const MarginApp: React.FC = () => {
 
   const handleImportEpub = async (epubData: ParsedEpub, originalFile: File) => {
     if (!user) return;
+    const token = await getAuthToken();
+    if (!token) {
+      alert('请先登录再导入文件。');
+      return;
+    }
 
     const documentId = `doc-${Date.now()}`;
 
@@ -285,7 +302,7 @@ const MarginApp: React.FC = () => {
         toc: epubData.toc
       });
 
-      await uploadEpubToSupabase(originalFile, documentId, user.id);
+      await uploadEpubToSupabase(originalFile, documentId, token);
 
       const nextDocuments = [...activeProject.documents, newDocument];
       const indexes = buildProjectIndexes(nextDocuments, activeProject.lexemeIndex, activeProject.interactionLog);
@@ -297,9 +314,9 @@ const MarginApp: React.FC = () => {
         interactionLog: indexes.interactionLog
       };
 
-      await upsertProjectSnapshot(nextProject, user.id, newDocument.id);
+      await upsertProjectSnapshot(nextProject, token, newDocument.id);
       await Promise.all(
-        nextDocuments.map((doc) => upsertDocumentSnapshot(doc, nextProject.id, user.id))
+        nextDocuments.map((doc) => upsertDocumentSnapshot(doc, nextProject.id, token))
       );
 
       setActiveProject(nextProject);
@@ -356,6 +373,7 @@ const MarginApp: React.FC = () => {
     ]);
 
     try {
+      const token = await getAuthToken();
       await streamAnnotation(
         context,
         prompt,
@@ -366,7 +384,8 @@ const MarginApp: React.FC = () => {
           user_id: user?.id || '',
           project_id: activeProject.id,
           document_id: activeDocument.id
-        }
+        },
+        token || undefined
       );
     } catch (e) {
       console.error(e);
@@ -387,6 +406,7 @@ const MarginApp: React.FC = () => {
     setIsProjectChatLoading(true);
 
     try {
+      const token = await getAuthToken();
       await streamProjectChat(
         activeProject,
         [...projectMessages, userMsg],
@@ -396,7 +416,8 @@ const MarginApp: React.FC = () => {
         {
           user_id: user?.id || '',
           project_id: activeProject.id
-        }
+        },
+        token || undefined
       );
     } catch (e) {
       console.error(e);
@@ -475,13 +496,6 @@ const MarginApp: React.FC = () => {
             readingProgress={readingProgress}
             recordInteraction={recordInteraction}
             updateLexeme={updateLexeme}
-            generateWordDefinition={(word) =>
-              generateWordDefinition(word, undefined, {
-                user_id: user?.id || '',
-                project_id: activeProject.id,
-                document_id: activeDocument?.id || ''
-              })
-            }
             onImportClick={() => setIsImportOpen(true)}
             userId={user?.id}
             onOpenTraffic={() => setIsTrafficOpen(true)}
