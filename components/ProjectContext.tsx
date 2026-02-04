@@ -7,6 +7,8 @@ interface ProjectContextProps {
   onDocumentSelect: (document: Document) => void;
   onImportClick?: () => void;
   showImport?: boolean;
+  showHeader?: boolean;
+  headerLabel?: string;
 }
 
 const ProjectContext: React.FC<ProjectContextProps> = ({
@@ -14,15 +16,19 @@ const ProjectContext: React.FC<ProjectContextProps> = ({
   activeDocumentId,
   onDocumentSelect,
   onImportClick,
-  showImport = true
+  showImport = true,
+  showHeader = true,
+  headerLabel = 'Project Materials'
 }) => {
   return (
     <div className="flex flex-col font-sans h-full">
-      <div className="mb-8">
-        <div className="text-[9px] uppercase tracking-[0.3em] text-accent font-bold mb-2">Current Project</div>
-        <h2 className="text-xl font-display text-ink leading-tight mb-3 tracking-tight">{project.name}</h2>
-        <div className="w-8 h-px bg-accent/20" />
-      </div>
+      {showHeader && (
+        <div className="mb-8">
+          <div className="text-[9px] uppercase tracking-[0.3em] text-accent font-bold mb-2">{headerLabel}</div>
+          <h2 className="text-xl font-display text-ink leading-tight mb-3 tracking-tight">{project.name}</h2>
+          <div className="w-8 h-px bg-accent/20" />
+        </div>
+      )}
 
       <div className="flex-1 space-y-4">
         {project.documents.map((doc) => (
@@ -71,7 +77,7 @@ const ProjectContext: React.FC<ProjectContextProps> = ({
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-            Import Article
+            Import EPUB
           </button>
         )}
       </div>

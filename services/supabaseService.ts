@@ -51,6 +51,7 @@ if (isLikelySupabaseUrl(supabaseUrl) && supabaseKey) {
 }
 
 const BUCKET_NAME = 'margin_books';
+const AVATAR_BUCKET_NAME = 'margin_avatars';
 
 /**
  * 上传 EPUB 到 Supabase Storage (按用户隔离)
@@ -92,5 +93,40 @@ export const getEpubUrl = async (path: string): Promise<string> => {
     return data?.signedUrl || '';
   } catch (e) {
     return '';
+  }
+};
+
+export const uploadAvatarToSupabase = async (
+  file: File,
+  userId: string
+): Promise<{ path: string; publicUrl: string }> => {
+  if (!supabase) {
+    console.warn("Supabase not available for upload.");
+    return { path: '', publicUrl: '' };
+  }
+
+  const fileExt = file.name.split('.').pop() || 'png';
+  const filePath = `users/${userId}/avatar/${Date.now()}.${fileExt}`;
+
+  try {
+    const { data, error } = await supabase.storage
+      .from(AVATAR_BUCKET_NAME)
+      .upload(filePath, file, {
+        upsert: true,
+        contentType: file.type || 'image/png'
+      });
+
+    if (error) throw error;
+
+    const { data: publicData } = supabase.storage.from(AVATAR_BUCKET_NAME).getPublicUrl(data.path);
+    if (publicData?.publicUrl) {
+      return { path: data.path, publicUrl: publicData.publicUrl };
+    }
+
+    const signed = await supabase.storage.from(AVATAR_BUCKET_NAME).createSignedUrl(data.path, 60 * 60 * 24 * 365);
+    return { path: data.path, publicUrl: signed.data?.signedUrl || '' };
+  } catch (error) {
+    console.error('Supabase Avatar Upload Error:', error);
+    return { path: '', publicUrl: '' };
   }
 };

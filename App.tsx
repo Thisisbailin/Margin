@@ -17,9 +17,9 @@ import {
 } from './types';
 import { MOCK_PROJECT } from './constants';
 import { streamAnnotation, generateWordDefinition, streamProjectChat } from './services/llmService';
-import { ingestArticleContent } from './services/articleService';
 import { uploadEpubToSupabase } from './services/supabaseService';
-import { buildDocumentFromBlocks, buildDocumentFromTextSections, buildProjectIndexes } from './services/documentBuilder';
+import { buildDocumentFromBlocks, buildProjectIndexes } from './services/documentBuilder';
+import type { ParsedEpub } from './services/epubService';
 import manifesto from './docs/margin-manifesto.md?raw';
 
 const HomeView = lazy(() => import('./Home'));
@@ -229,47 +229,23 @@ const MarginApp: React.FC = () => {
     []
   );
 
-  const handleImportArticle = async (
-    input: string,
-    title: string,
-    isUrl: boolean,
-    epubData?: any,
-    originalFile?: File
-  ) => {
+  const handleImportEpub = async (epubData: ParsedEpub, originalFile: File) => {
     if (!user) return;
 
     const documentId = `doc-${Date.now()}`;
 
     try {
-      let newDocument: Document;
-      if (epubData) {
-        newDocument = buildDocumentFromBlocks({
-          id: documentId,
-          type: DocumentType.Book,
-          title: epubData.title || title || 'New Material',
-          author: epubData.author,
-          language: epubData.language || 'English',
-          sections: epubData.sections || [],
-          toc: epubData.toc
-        });
+      const newDocument = buildDocumentFromBlocks({
+        id: documentId,
+        type: DocumentType.Book,
+        title: epubData.title || 'New Material',
+        author: epubData.author,
+        language: epubData.language || 'English',
+        sections: epubData.sections || [],
+        toc: epubData.toc
+      });
 
-        if (originalFile) {
-          await uploadEpubToSupabase(originalFile, documentId, user.id);
-        }
-      } else {
-        const parsed = await ingestArticleContent(input, title, isUrl, {
-          user_id: user.id,
-          project_id: activeProject.id
-        });
-        newDocument = buildDocumentFromTextSections({
-          id: documentId,
-          type: DocumentType.Article,
-          title: parsed.title || title || 'New Material',
-          author: parsed.author,
-          language: parsed.language || 'English',
-          sections: parsed.sections
-        });
-      }
+      await uploadEpubToSupabase(originalFile, documentId, user.id);
 
       setActiveProject((prev) => {
         const documents = [...prev.documents, newDocument];
@@ -286,7 +262,7 @@ const MarginApp: React.FC = () => {
       setLeftPanelState('collapsed');
     } catch (err) {
       console.error('Import failed', err);
-      alert('Failed to process content. Please check the source or your API key.');
+      alert('Failed to process EPUB. Please check the file.');
     }
   };
 
@@ -414,7 +390,7 @@ const MarginApp: React.FC = () => {
       )}
       {isImportOpen && (
         <Suspense fallback={null}>
-          <ImportModal isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} onImport={handleImportArticle} />
+          <ImportModal isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} onImport={handleImportEpub} />
         </Suspense>
       )}
       {isTrafficOpen && (

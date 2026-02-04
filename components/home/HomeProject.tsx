@@ -26,19 +26,47 @@ const HomeProject: React.FC<HomeProjectProps> = ({
   isProjectChatLoading,
   onImportClick
 }) => {
+  const handleNewProject = () => {
+    alert('当前版本只支持单项目');
+  };
+
+  const materialCount = activeProject.documents.length;
+
   return (
     <div className="flex-1 flex gap-12 overflow-hidden animate-fade-in mb-4">
-      <div className="w-80 flex flex-col gap-10">
-        <div className="bg-surface p-8 rounded-[2rem] border border-black/5">
-          <h3 className="font-display text-2xl text-ink mb-3">{activeProject.name}</h3>
-          <p className="text-xs font-serif text-gray-400 leading-relaxed italic">{activeProject.description}</p>
+      <div className="w-80 flex flex-col gap-8">
+        <div className="bg-surface p-8 rounded-[2rem] border border-black/5 shadow-soft flex flex-col gap-6">
+          <div>
+            <div className="text-[9px] uppercase tracking-[0.3em] text-accent font-bold mb-3">Active Project</div>
+            <h3 className="font-display text-2xl text-ink mb-2">{activeProject.name}</h3>
+            <p className="text-xs font-serif text-gray-400 leading-relaxed italic">{activeProject.description}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={onImportClick}
+              className="py-3 rounded-2xl bg-ink text-white text-[10px] font-bold uppercase tracking-widest hover:bg-black transition-all shadow-sm"
+            >
+              Import EPUB
+            </button>
+            <button
+              onClick={handleNewProject}
+              className="py-3 rounded-2xl border border-black/10 text-ink text-[10px] font-bold uppercase tracking-widest hover:border-accent/40 hover:text-accent transition-all"
+            >
+              New Project
+            </button>
+          </div>
+          <div className="pt-2 border-t border-black/5">
+            <div className="text-[9px] uppercase tracking-[0.3em] text-gray-400 font-bold">Materials</div>
+            <div className="text-xs font-serif text-gray-400 italic mt-1">{materialCount} items in this project</div>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto no-scrollbar">
           <ProjectContext
             project={activeProject}
             activeDocumentId={activeDocument?.id}
             onDocumentSelect={onDocumentSelect}
-            onImportClick={onImportClick}
+            showImport={false}
+            showHeader={false}
           />
         </div>
       </div>
