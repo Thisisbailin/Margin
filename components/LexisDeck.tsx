@@ -1,11 +1,11 @@
 
 import React, { useState, useMemo } from 'react';
-import { LexiconItem, VocabularyStat, TopographyView } from '../types';
+import { LexemeEntry, LexemeStat, TopographyView } from '../types';
 
 interface LexisDeckProps {
-  lexicon: LexiconItem[];
+  lexicon: LexemeEntry[];
   bookProgress: number; 
-  onUpdateLexicon: (lemma: string, updates: Partial<VocabularyStat>) => void;
+  onUpdateLexicon: (lemma: string, updates: Partial<LexemeStat>) => void;
   onGenerateDefinition: (word: string) => Promise<string>;
   onNavigateToContext: (bookId: string, sentenceId: string, wordId: string) => void;
   isExpanded?: boolean; 
@@ -22,26 +22,26 @@ const LexisDeck: React.FC<LexisDeckProps> = ({
   const [simulatedProgress, setSimulatedProgress] = useState(bookProgress);
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   const [mode, setMode] = useState<'browse' | 'study'>('browse');
-  const [sessionQueue, setSessionQueue] = useState<LexiconItem[]>([]);
+  const [sessionQueue, setSessionQueue] = useState<LexemeEntry[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
   // --- 核心地形逻辑 ---
   const landscapeData = useMemo(() => {
     const total = lexicon.length;
     // 按首次发现进度排序，用于内容曲线 (X=进度, Y=累积百分比)
-    const sortedByDiscovery = [...lexicon].sort((a, b) => a.firstDiscoveryProgress - b.firstDiscoveryProgress);
+    const sortedByDiscovery = [...lexicon].sort((a, b) => a.firstEncounterProgress - b.firstEncounterProgress);
     // 按频次排序，用于散点图 (X=频次排行)
     const sortedByFrequency = [...lexicon].sort((a, b) => b.count - a.count);
 
     // 1. 生成攀登曲线路径点 (仅用于 Content View)
     const curvePoints: {x: number, y: number}[] = sortedByDiscovery.map((item, index) => ({
-      x: item.firstDiscoveryProgress * 100,
+      x: item.firstEncounterProgress * 100,
       y: ((index + 1) / total) * 100
     }));
 
     // 2. 将单词粒子映射到对应的多维坐标
     const particles = lexicon.map((item) => {
-      const isDiscovered = item.firstDiscoveryProgress <= simulatedProgress;
+      const isDiscovered = item.firstEncounterProgress <= simulatedProgress;
       const freqIndex = sortedByFrequency.findIndex(l => l.lemma === item.lemma);
       const discoveryIndex = sortedByDiscovery.findIndex(l => l.lemma === item.lemma);
 
@@ -52,7 +52,7 @@ const LexisDeck: React.FC<LexisDeckProps> = ({
 
       if (view === 'content') {
         // 内容视角：X 为书本发现进度，Y 为累积唯一词数百分比
-        x = item.firstDiscoveryProgress * 100;
+        x = item.firstEncounterProgress * 100;
         y = ((discoveryIndex + 1) / total) * 100;
         opacity = isDiscovered ? 0.9 : 0.15;
         color = 'fill-accent';
@@ -92,7 +92,7 @@ const LexisDeck: React.FC<LexisDeckProps> = ({
 
   const activeZoneWords = selectedZone ? (landscapeData.zones as any)[selectedZone] : [];
 
-  const startStudy = (words: LexiconItem[]) => {
+  const startStudy = (words: LexemeEntry[]) => {
     if (words.length === 0) return;
     setSessionQueue(words.sort(() => Math.random() - 0.5).slice(0, 10));
     setCurrentIndex(0);

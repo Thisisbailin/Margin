@@ -1,16 +1,25 @@
-
 import React, { useState, useEffect, useMemo, useCallback, Suspense, lazy } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { SignedIn, SignedOut, SignInButton, useUser } from '@clerk/clerk-react';
-import { 
-  Book, Project, Sentence, WordOccurrence, AgentMessage, 
-  UserProficiency, PanelState, AnnotationContext, LexiconItem, 
-  MemoryInteraction, Familiarity, MaterialType, Chapter 
+import {
+  Document,
+  Project,
+  Token,
+  Span,
+  AgentMessage,
+  UserProficiency,
+  PanelState,
+  AnnotationContext,
+  LexemeEntry,
+  LexemeStat,
+  Interaction,
+  DocumentType
 } from './types';
 import { MOCK_PROJECT } from './constants';
 import { streamAnnotation, generateWordDefinition, streamProjectChat } from './services/llmService';
 import { ingestArticleContent } from './services/articleService';
 import { uploadEpubToSupabase } from './services/supabaseService';
+import { buildDocumentFromBlocks, buildDocumentFromTextSections, buildProjectIndexes } from './services/documentBuilder';
 import manifesto from './docs/margin-manifesto.md?raw';
 
 const HomeView = lazy(() => import('./Home'));
@@ -78,6 +87,23 @@ const LandingPage: React.FC = () => (
   </div>
 );
 
+const buildLexemeEntries = (project: Project): LexemeEntry[] => {
+  const stats = project.lexemeIndex.stats;
+  const lemmas = Object.keys(stats);
+  const maxOrder = Math.max(1, ...lemmas.map((lemma) => stats[lemma].firstEncounterOrder || 0));
+
+  return lemmas.map((lemma) => {
+    const stat = stats[lemma];
+    const count = project.occurrenceIndex.byLemma[lemma]?.length || 0;
+    const firstEncounterProgress = maxOrder ? (stat.firstEncounterOrder || 0) / maxOrder : 0;
+    return {
+      ...stat,
+      count,
+      firstEncounterProgress
+    };
+  });
+};
+
 const MarginApp: React.FC = () => {
   const { user } = useUser();
   const [leftPanelState, setLeftPanelState] = useState<PanelState>('collapsed');
@@ -85,191 +111,242 @@ const MarginApp: React.FC = () => {
   const [isZenMode, setIsZenMode] = useState(true);
   const [userProficiency, setUserProficiency] = useState<UserProficiency>(UserProficiency.Intermediate);
   const [activeView, setActiveView] = useState<'home' | 'reader'>('home');
-  
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isTrafficOpen, setIsTrafficOpen] = useState(false);
   const [isMeditationOpen, setIsMeditationOpen] = useState(false);
-  
+
   const [activeProject, setActiveProject] = useState<Project>(MOCK_PROJECT);
-  const [activeBook, setActiveBook] = useState<Book | undefined>(MOCK_PROJECT.books[0]);
-  const [readingProgress, setReadingProgress] = useState(0.15); 
-  
+  const [activeDocument, setActiveDocument] = useState<Document | undefined>(MOCK_PROJECT.documents[0]);
+  const [readingProgress] = useState(0.15);
+
   const [projectMessages, setProjectMessages] = useState<AgentMessage[]>([]);
-  const [projectInput, setProjectInput] = useState("");
+  const [projectInput, setProjectInput] = useState('');
   const [isProjectChatLoading, setIsProjectChatLoading] = useState(false);
-  
+
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [isAiLoading, setIsAiLoading] = useState(false);
-  const [focusedSentenceId, setFocusedSentenceId] = useState<string | null>(null);
-  const [activeToken, setActiveToken] = useState<WordOccurrence | null>(null);
+  const [focusedSpanId, setFocusedSpanId] = useState<string | null>(null);
+  const [activeToken, setActiveToken] = useState<Token | null>(null);
 
-  const handleBookSelect = useCallback((book: Book) => {
-    setActiveBook(book);
+  const handleDocumentSelect = useCallback((document: Document) => {
+    setActiveDocument(document);
     setActiveView('reader');
   }, []);
 
-  // Derive lexicon for the focus module
-  const projectLexicon = useMemo(() => {
-    return Object.values(activeProject.vocabularyStats) as LexiconItem[];
-  }, [activeProject.vocabularyStats]);
+  const projectLexicon = useMemo(() => buildLexemeEntries(activeProject), [activeProject]);
+
+  const getMasteryScore = useCallback(
+    (lemma: string) => activeProject.lexemeIndex.stats[lemma]?.masteryScore || 0,
+    [activeProject.lexemeIndex.stats]
+  );
 
   useEffect(() => {
-    if (rightPanelState === 'collapsed') {
-      setIsZenMode(true);
-    } else {
-      setIsZenMode(false);
-    }
+    setIsZenMode(rightPanelState === 'collapsed');
   }, [rightPanelState]);
 
-  const handleImportArticle = async (input: string, title: string, isUrl: boolean, epubData?: any, originalFile?: File) => {
+  const updateLexeme = useCallback((lemma: string, updates: Partial<LexemeStat>) => {
+    setActiveProject((prev) => {
+      const nextStats = { ...prev.lexemeIndex.stats };
+      const existing = nextStats[lemma] || {
+        lemma,
+        totalInteractions: 0,
+        implicitScore: 0,
+        explicitScore: 0,
+        masteryScore: 0,
+        firstEncounterAt: 0,
+        firstEncounterOrder: 0,
+        lastEncounterAt: 0
+      };
+      nextStats[lemma] = { ...existing, ...updates };
+      return { ...prev, lexemeIndex: { stats: nextStats } };
+    });
+  }, []);
+
+  const recordInteraction = useCallback(
+    (lemma: string, type: 'implicit' | 'explicit', weight: number, occurrenceId?: string) => {
+      setActiveProject((prev) => {
+        const nextStats = { ...prev.lexemeIndex.stats };
+        const nextInteractionLog = {
+          byOccurrence: { ...prev.interactionLog.byOccurrence },
+          byLemma: { ...prev.interactionLog.byLemma }
+        };
+
+        const resolvedOccurrenceId =
+          occurrenceId || prev.occurrenceIndex.byLemma[lemma]?.[0] || `virtual-${lemma}`;
+
+        const now = Date.now();
+        let stat = nextStats[lemma];
+        if (!stat) {
+          const order = Object.keys(nextStats).length + 1;
+          stat = {
+            lemma,
+            totalInteractions: 0,
+            implicitScore: 0,
+            explicitScore: 0,
+            masteryScore: 0,
+            firstEncounterAt: now,
+            firstEncounterOrder: order,
+            lastEncounterAt: now
+          };
+        }
+
+        if (stat.firstEncounterAt === 0) {
+          stat.firstEncounterAt = now;
+          stat.firstEncounterOrder = stat.firstEncounterOrder || Object.keys(nextStats).length + 1;
+        }
+
+        const interaction: Interaction = {
+          id: `i-${now}`,
+          occurrenceId: resolvedOccurrenceId,
+          lemma,
+          type,
+          weight,
+          timestamp: now
+        };
+
+        nextInteractionLog.byOccurrence[resolvedOccurrenceId] =
+          nextInteractionLog.byOccurrence[resolvedOccurrenceId] || [];
+        nextInteractionLog.byLemma[lemma] = nextInteractionLog.byLemma[lemma] || [];
+        nextInteractionLog.byOccurrence[resolvedOccurrenceId].push(interaction);
+        nextInteractionLog.byLemma[lemma].push(interaction);
+
+        stat.totalInteractions += 1;
+        if (type === 'explicit') stat.explicitScore += weight;
+        else stat.implicitScore += weight;
+        stat.masteryScore = Math.min(1, stat.implicitScore * 0.1 + stat.explicitScore * 0.3);
+        stat.lastEncounterAt = now;
+        nextStats[lemma] = stat;
+
+        return {
+          ...prev,
+          lexemeIndex: { stats: nextStats },
+          interactionLog: nextInteractionLog
+        };
+      });
+    },
+    []
+  );
+
+  const handleImportArticle = async (
+    input: string,
+    title: string,
+    isUrl: boolean,
+    epubData?: any,
+    originalFile?: File
+  ) => {
     if (!user) return;
-    
-    let chapters: Chapter[] = [];
-    let author = 'Acquired Content';
-    let type = MaterialType.Article;
-    let storagePath: string | undefined = undefined;
-    const bookId = `book-${Date.now()}`;
+
+    const documentId = `doc-${Date.now()}`;
 
     try {
+      let newDocument: Document;
       if (epubData) {
-        type = MaterialType.Book;
-        author = epubData.author;
-        
-        const [processedChapters, path] = await Promise.all([
-          Promise.all(epubData.chapters.slice(0, 3).map(async (ch: any, idx: number) => {
-            const struct = await ingestArticleContent(ch.content, ch.title, false, {
-              user_id: user.id,
-              project_id: activeProject.id,
-            });
-            return { ...struct, number: idx + 1 };
-          })),
-          originalFile ? uploadEpubToSupabase(originalFile, bookId, user.id) : Promise.resolve(undefined)
-        ]);
-        
-        chapters = processedChapters;
-        storagePath = path;
-      } else {
-        const chapter = await ingestArticleContent(input, title, isUrl, {
-          user_id: user.id,
-          project_id: activeProject.id,
+        newDocument = buildDocumentFromBlocks({
+          id: documentId,
+          type: DocumentType.Book,
+          title: epubData.title || title || 'New Material',
+          author: epubData.author,
+          language: epubData.language || 'English',
+          sections: epubData.sections || [],
+          toc: epubData.toc
         });
-        chapters = [chapter];
-      }
-      
-      const newBook: Book = {
-        id: bookId,
-        type,
-        title: title || epubData?.title || 'New Material',
-        author: author,
-        language: 'English',
-        progress: 0,
-        chapters: chapters,
-        storagePath
-      };
 
-      setActiveProject(prev => ({ ...prev, books: [...prev.books, newBook] }));
-      setActiveBook(newBook);
+        if (originalFile) {
+          await uploadEpubToSupabase(originalFile, documentId, user.id);
+        }
+      } else {
+        const parsed = await ingestArticleContent(input, title, isUrl, {
+          user_id: user.id,
+          project_id: activeProject.id
+        });
+        newDocument = buildDocumentFromTextSections({
+          id: documentId,
+          type: DocumentType.Article,
+          title: parsed.title || title || 'New Material',
+          author: parsed.author,
+          language: parsed.language || 'English',
+          sections: parsed.sections
+        });
+      }
+
+      setActiveProject((prev) => {
+        const documents = [...prev.documents, newDocument];
+        const indexes = buildProjectIndexes(documents, prev.lexemeIndex, prev.interactionLog);
+        return {
+          ...prev,
+          documents,
+          occurrenceIndex: indexes.occurrenceIndex,
+          lexemeIndex: indexes.lexemeIndex,
+          interactionLog: indexes.interactionLog
+        };
+      });
+      setActiveDocument(newDocument);
       setLeftPanelState('collapsed');
     } catch (err) {
-      console.error("Import failed", err);
-      alert("Failed to process content. Please check the source or your API key.");
+      console.error('Import failed', err);
+      alert('Failed to process content. Please check the source or your API key.');
     }
   };
 
-  const recordInteraction = useCallback((lemma: string, type: 'implicit' | 'explicit', weight: number, occurrenceId: string) => {
-    setActiveProject(prev => {
-      const stats = { ...prev.vocabularyStats };
-      if (!stats[lemma]) {
-        stats[lemma] = {
-          lemma,
-          totalOccurrences: 0,
-          relativeDifficulty: 0.5,
-          firstDiscoveryProgress: readingProgress,
-          masteryScore: 0,
-          implicitScore: 0,
-          explicitScore: 0,
-          familiarity: Familiarity.Unknown,
-          reviewCount: 0,
-          interactions: [],
-          lastEncounterDate: Date.now()
-        };
-      }
-      
-      const interaction: MemoryInteraction = {
-        timestamp: Date.now(),
-        occurrenceId,
-        type,
-        weight
-      };
-      
-      stats[lemma].interactions.push(interaction);
-      stats[lemma].totalOccurrences++;
-      if (type === 'explicit') {
-        stats[lemma].explicitScore += weight;
-        stats[lemma].reviewCount++;
-      } else {
-        stats[lemma].implicitScore += weight;
-      }
-      
-      // Basic mastery calculation
-      stats[lemma].masteryScore = Math.min(1, (stats[lemma].implicitScore * 0.1) + (stats[lemma].explicitScore * 0.3));
-      
-      return { ...prev, vocabularyStats: stats };
-    });
-  }, [readingProgress]);
-
-  const handleSentenceClick = (sentence: Sentence) => {
+  const handleSpanClick = (span: Span) => {
     if (isZenMode && rightPanelState === 'collapsed') {
       setRightPanelState('default');
     }
-    setFocusedSentenceId(sentence.id);
+    setFocusedSpanId(span.id);
     setActiveToken(null);
-    
-    // Auto-annotate sentence if empty
-    const annotationPrompt = `解构这句话的文学风格与深层含义。`;
-    handleAnnotate(sentence.text, annotationPrompt, true);
+
+    const annotationPrompt = '解构这句话的文学风格与深层含义。';
+    handleAnnotate(span.text, annotationPrompt, true);
   };
 
-  const handleTokenClick = (token: WordOccurrence) => {
+  const handleTokenClick = (token: Token) => {
     setActiveToken(token);
     recordInteraction(token.lemma, 'explicit', 0.2, token.id);
-    
-    const annotationPrompt = `深入解析单词 "${token.text}" (lemma: ${token.lemma}) 在当前语境下的用法、词根词缀及情感色彩。`;
-    handleAnnotate(token.text, annotationPrompt, false);
+
+    const annotationPrompt = `深入解析单词 "${token.surface}" (lemma: ${token.lemma}) 在当前语境下的用法、词根词缀及情感色彩。`;
+    handleAnnotate(token.surface, annotationPrompt, false);
   };
 
-  const handleAnnotate = async (target: string, prompt: string, isSentence: boolean) => {
-    if (!activeBook) return;
-    
+  const handleAnnotate = async (target: string, prompt: string, isSpan: boolean) => {
+    if (!activeDocument) return;
+
+    const mastery = activeToken ? getMasteryScore(activeToken.lemma) : 0.5;
     const context: AnnotationContext = {
-      targetSentence: target,
-      surroundingContext: target, // Simplified for now
-      bookTitle: activeBook.title,
-      author: activeBook.author,
-      language: activeBook.language,
+      targetText: target,
+      surroundingContext: target,
+      documentTitle: activeDocument.title,
+      author: activeDocument.author,
+      language: activeDocument.language,
       projectName: activeProject.name,
       projectDescription: activeProject.description,
       proficiency: userProficiency,
-      targetMastery: activeToken?.masteryScore || 0.5,
-      isFocusedLookup: !isSentence
+      targetMastery: mastery,
+      isFocusedLookup: !isSpan
     };
 
     setIsAiLoading(true);
     const newMsgId = `msg-${Date.now()}`;
-    setMessages(prev => [...prev, 
+    setMessages((prev) => [
+      ...prev,
       { id: `user-${newMsgId}`, role: 'user', content: target, type: 'annotation' },
-      { id: newMsgId, role: 'agent', content: "", type: 'annotation' }
+      { id: newMsgId, role: 'agent', content: '', type: 'annotation' }
     ]);
 
     try {
-      await streamAnnotation(context, prompt, (fullText) => {
-        setMessages(prev => prev.map(m => m.id === newMsgId ? { ...m, content: fullText } : m));
-      }, {
-        user_id: user?.id || "",
-        project_id: activeProject.id,
-        book_id: activeBook.id,
-      });
+      await streamAnnotation(
+        context,
+        prompt,
+        (fullText) => {
+          setMessages((prev) => prev.map((m) => (m.id === newMsgId ? { ...m, content: fullText } : m)));
+        },
+        {
+          user_id: user?.id || '',
+          project_id: activeProject.id,
+          document_id: activeDocument.id
+        }
+      );
     } catch (e) {
       console.error(e);
     } finally {
@@ -279,22 +356,27 @@ const MarginApp: React.FC = () => {
 
   const handleProjectChat = async () => {
     if (!projectInput.trim() || isProjectChatLoading) return;
-    
+
     const userMsg: AgentMessage = { id: `u-${Date.now()}`, role: 'user', content: projectInput, type: 'chat' };
     const agentMsgId = `a-${Date.now()}`;
-    const agentMsg: AgentMessage = { id: agentMsgId, role: 'agent', content: "", type: 'chat' };
-    
-    setProjectMessages(prev => [...prev, userMsg, agentMsg]);
-    setProjectInput("");
+    const agentMsg: AgentMessage = { id: agentMsgId, role: 'agent', content: '', type: 'chat' };
+
+    setProjectMessages((prev) => [...prev, userMsg, agentMsg]);
+    setProjectInput('');
     setIsProjectChatLoading(true);
 
     try {
-      await streamProjectChat(activeProject, [...projectMessages, userMsg], (fullText) => {
-        setProjectMessages(prev => prev.map(m => m.id === agentMsgId ? { ...m, content: fullText } : m));
-      }, {
-        user_id: user?.id || "",
-        project_id: activeProject.id,
-      });
+      await streamProjectChat(
+        activeProject,
+        [...projectMessages, userMsg],
+        (fullText) => {
+          setProjectMessages((prev) => prev.map((m) => (m.id === agentMsgId ? { ...m, content: fullText } : m)));
+        },
+        {
+          user_id: user?.id || '',
+          project_id: activeProject.id
+        }
+      );
     } catch (e) {
       console.error(e);
     } finally {
@@ -302,7 +384,6 @@ const MarginApp: React.FC = () => {
     }
   };
 
-  // Auto-collapse panels on mobile devices
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 768) {
@@ -310,9 +391,8 @@ const MarginApp: React.FC = () => {
         setRightPanelState('collapsed');
       }
     };
-    
+
     window.addEventListener('resize', handleResize);
-    // Initial check
     if (window.innerWidth < 768) {
       setLeftPanelState('collapsed');
       setRightPanelState('collapsed');
@@ -324,7 +404,12 @@ const MarginApp: React.FC = () => {
     <>
       {isSettingsOpen && (
         <Suspense fallback={null}>
-          <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} proficiency={userProficiency} onProficiencyChange={setUserProficiency} />
+          <SettingsModal
+            isOpen={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+            proficiency={userProficiency}
+            onProficiencyChange={setUserProficiency}
+          />
         </Suspense>
       )}
       {isImportOpen && (
@@ -334,7 +419,12 @@ const MarginApp: React.FC = () => {
       )}
       {isTrafficOpen && (
         <Suspense fallback={null}>
-          <TrafficDashboardModal isOpen={isTrafficOpen} onClose={() => setIsTrafficOpen(false)} userId={user?.id} projectId={activeProject.id} />
+          <TrafficDashboardModal
+            isOpen={isTrafficOpen}
+            onClose={() => setIsTrafficOpen(false)}
+            userId={user?.id}
+            projectId={activeProject.id}
+          />
         </Suspense>
       )}
       {isMeditationOpen && (
@@ -344,7 +434,7 @@ const MarginApp: React.FC = () => {
             onClose={() => setIsMeditationOpen(false)}
             userId={user?.id}
             projectId={activeProject.id}
-            bookId={activeBook?.id}
+            bookId={activeDocument?.id}
           />
         </Suspense>
       )}
@@ -353,8 +443,8 @@ const MarginApp: React.FC = () => {
         <Suspense fallback={<div className="h-screen w-screen bg-paper" />}>
           <HomeView
             activeProject={activeProject}
-            activeBook={activeBook}
-            onBookSelect={handleBookSelect}
+            activeDocument={activeDocument}
+            onDocumentSelect={handleDocumentSelect}
             projectMessages={projectMessages}
             projectInput={projectInput}
             setProjectInput={setProjectInput}
@@ -363,11 +453,12 @@ const MarginApp: React.FC = () => {
             projectLexicon={projectLexicon}
             readingProgress={readingProgress}
             recordInteraction={recordInteraction}
+            updateLexeme={updateLexeme}
             generateWordDefinition={(word) =>
               generateWordDefinition(word, undefined, {
-                user_id: user?.id || "",
+                user_id: user?.id || '',
                 project_id: activeProject.id,
-                book_id: activeBook?.id || "",
+                document_id: activeDocument?.id || ''
               })
             }
             onImportClick={() => setIsImportOpen(true)}
@@ -384,17 +475,18 @@ const MarginApp: React.FC = () => {
             onLeftPanelStateChange={setLeftPanelState}
             onRightPanelStateChange={setRightPanelState}
             activeProject={activeProject}
-            activeBook={activeBook}
-            onBookSelect={handleBookSelect}
+            activeDocument={activeDocument}
+            onDocumentSelect={handleDocumentSelect}
             onEnterHome={() => setActiveView('home')}
             isZenMode={isZenMode}
-            focusedSentenceId={focusedSentenceId}
+            focusedSpanId={focusedSpanId}
             activeToken={activeToken}
-            onSentenceClick={handleSentenceClick}
+            onSpanClick={handleSpanClick}
             onTokenClick={handleTokenClick}
             messages={messages}
             isAiLoading={isAiLoading}
             userProficiency={userProficiency}
+            getMasteryScore={getMasteryScore}
           />
         </Suspense>
       )}

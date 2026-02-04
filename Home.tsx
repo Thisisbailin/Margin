@@ -1,19 +1,20 @@
 import React from 'react';
-import { Book, Project, AgentMessage, LexiconItem } from './types';
+import { Document, Project, AgentMessage, LexemeEntry, LexemeStat } from './types';
 import FocusModule from './components/FocusModule';
 
 interface HomeProps {
   activeProject: Project;
-  activeBook: Book | undefined;
-  onBookSelect: (book: Book) => void;
+  activeDocument: Document | undefined;
+  onDocumentSelect: (document: Document) => void;
   projectMessages: AgentMessage[];
   projectInput: string;
   setProjectInput: (val: string) => void;
   onProjectChat: () => void;
   isProjectChatLoading: boolean;
-  projectLexicon: LexiconItem[];
+  projectLexicon: LexemeEntry[];
   readingProgress: number;
-  recordInteraction: (lemma: string, type: 'implicit' | 'explicit', weight: number, occurrenceId: string) => void;
+  recordInteraction: (lemma: string, type: 'implicit' | 'explicit', weight: number, occurrenceId?: string) => void;
+  updateLexeme: (lemma: string, updates: Partial<LexemeStat>) => void;
   generateWordDefinition: (word: string) => Promise<string>;
   onImportClick: () => void;
   userId?: string;
@@ -23,8 +24,8 @@ interface HomeProps {
 
 const Home: React.FC<HomeProps> = ({
   activeProject,
-  activeBook,
-  onBookSelect,
+  activeDocument,
+  onDocumentSelect,
   projectMessages,
   projectInput,
   setProjectInput,
@@ -33,6 +34,7 @@ const Home: React.FC<HomeProps> = ({
   projectLexicon,
   readingProgress,
   recordInteraction,
+  updateLexeme,
   generateWordDefinition,
   onImportClick,
   userId,
@@ -46,8 +48,8 @@ const Home: React.FC<HomeProps> = ({
           <div className="flex-1 min-h-0">
             <FocusModule
               activeProject={activeProject}
-              activeBook={activeBook}
-              onBookSelect={onBookSelect}
+              activeDocument={activeDocument}
+              onDocumentSelect={onDocumentSelect}
               projectMessages={projectMessages}
               projectInput={projectInput}
               setProjectInput={setProjectInput}
@@ -56,6 +58,7 @@ const Home: React.FC<HomeProps> = ({
               projectLexicon={projectLexicon}
               readingProgress={readingProgress}
               recordInteraction={recordInteraction}
+              updateLexeme={updateLexeme}
               generateWordDefinition={generateWordDefinition}
               onImportClick={onImportClick}
               userId={userId}

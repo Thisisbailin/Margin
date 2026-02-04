@@ -1,5 +1,4 @@
-
-// Domain Types for Margin - Material Evolution Edition
+// Domain Types for Margin - App Layer Refactor v2
 
 export enum UserProficiency {
   Beginner = 'beginner',
@@ -7,105 +6,134 @@ export enum UserProficiency {
   Advanced = 'advanced'
 }
 
-export enum Familiarity {
-  Unknown = 0,
-  Seen = 1,
-  Familiar = 2,
-  Mastered = 3
-}
+export type PanelState = 'collapsed' | 'default' | 'expanded';
+export type TopographyView = 'content' | 'memory' | 'reality';
 
-export enum MaterialType {
+export enum DocumentType {
   Book = 'book',
   Article = 'article'
 }
 
-export type PanelState = 'collapsed' | 'default' | 'expanded';
-export type TopographyView = 'content' | 'memory' | 'reality';
-
-export interface ModelConfig {
-  lexical: string;   
-  contextual: string; 
-  synthesis: string;  
+export interface TocEntry {
+  id: string;
+  title: string;
+  level: number;
+  order?: number;
+  parentId?: string;
+  href?: string;
+  anchorId?: string;
+  sectionId?: string;
 }
 
-export interface MemoryInteraction {
-  timestamp: number;
-  occurrenceId: string;
-  type: 'implicit' | 'explicit'; 
-  weight: number; 
+export interface Document {
+  id: string;
+  type: DocumentType;
+  title: string;
+  author?: string;
+  language?: string;
+  metadata?: Record<string, string>;
+  toc: TocEntry[];
+  sections: Section[];
 }
 
-export interface VocabularyStat {
-  lemma: string;
-  totalOccurrences: number; 
-  relativeDifficulty: number; 
-  firstDiscoveryProgress: number; 
-  masteryScore: number;    
-  implicitScore: number;   
-  explicitScore: number;   
-  familiarity: Familiarity; 
-  reviewCount: number;     
-  interactions: MemoryInteraction[];
-  definition?: string; 
-  lastEncounterDate: number;
+export interface Section {
+  id: string;
+  title: string;
+  order: number;
+  level?: number;
+  parentId?: string;
+  sourcePath?: string;
+  blocks: Block[];
 }
 
-export interface LandscapeStats {
-  uniqueTokens: number;
-  totalTokens: number;
-  ttr: number; 
-  difficultyScore: number; 
+export type BlockType = 'paragraph' | 'heading' | 'quote' | 'poetry' | 'list';
+
+export interface Block {
+  id: string;
+  type: BlockType;
+  level?: number;
+  align?: 'left' | 'center' | 'right' | 'justify';
+  indent?: string;
+  indentKind?: 'text' | 'margin';
+  lineHeight?: string;
+  spacingBefore?: string;
+  spacingAfter?: string;
+  sourceIds?: string[];
+  noteType?: 'footnote' | 'endnote';
+  spans: Span[];
 }
 
-export interface WordOccurrence {
-  id: string;      
-  text: string;    
-  lemma: string;   
-  pos: string;     
-  masteryScore: number; 
-}
-
-export interface Sentence {
+export interface Span {
   id: string;
   text: string;
-  tokens: WordOccurrence[];
+  marks?: ('bold' | 'italic' | 'underline' | 'quote')[];
+  tokens: Token[];
 }
 
-export interface Paragraph {
-  id: string;
-  type: 'prose' | 'poetry' | 'dialogue'; 
-  sentences: Sentence[];
+export interface Token {
+  id: string; // same as occurrenceId
+  surface: string;
+  lemma: string;
+  position: number;
 }
 
-export interface Chapter {
+export interface Occurrence {
   id: string;
-  number: number;
-  title: string;
-  subtitle?: string;
-  content: Paragraph[];
+  lemma: string;
+  surface: string;
+  documentId: string;
+  sectionId: string;
+  blockId: string;
+  spanId: string;
+  tokenIndex: number;
 }
 
-export interface Book {
+export interface OccurrenceIndex {
+  byId: Record<string, Occurrence>;
+  byLemma: Record<string, string[]>;
+  bySection: Record<string, string[]>;
+  byBlock: Record<string, string[]>;
+  bySpan: Record<string, string[]>;
+}
+
+export interface LexemeStat {
+  lemma: string;
+  totalInteractions: number;
+  implicitScore: number;
+  explicitScore: number;
+  masteryScore: number;
+  firstEncounterAt: number;
+  firstEncounterOrder: number;
+  lastEncounterAt: number;
+  definition?: string;
+}
+
+export interface LexemeIndex {
+  stats: Record<string, LexemeStat>;
+}
+
+export interface Interaction {
   id: string;
-  type: MaterialType; 
-  title: string;
-  author: string;
-  language: string;
-  chapters: Chapter[]; 
-  progress: number; 
-  landscape?: LandscapeStats; 
-  wordCount?: number;
-  readingTime?: number; 
-  sourceUrl?: string;
-  storagePath?: string; // 新增：Supabase 中的存储路径
+  occurrenceId: string;
+  lemma: string;
+  type: 'implicit' | 'explicit';
+  weight: number;
+  timestamp: number;
+}
+
+export interface InteractionLog {
+  byOccurrence: Record<string, Interaction[]>;
+  byLemma: Record<string, Interaction[]>;
 }
 
 export interface Project {
   id: string;
   name: string;
   description: string;
-  books: Book[];
-  vocabularyStats: Record<string, VocabularyStat>; 
+  documents: Document[];
+  occurrenceIndex: OccurrenceIndex;
+  lexemeIndex: LexemeIndex;
+  interactionLog: InteractionLog;
 }
 
 export interface AgentMessage {
@@ -117,19 +145,19 @@ export interface AgentMessage {
 }
 
 export interface AnnotationContext {
-  targetSentence: string;
+  targetText: string;
   surroundingContext: string;
-  bookTitle: string;
-  author: string;
-  language: string;
+  documentTitle: string;
+  author?: string;
+  language?: string;
   projectName: string;
   projectDescription: string;
   proficiency: UserProficiency;
-  targetMastery: number; 
-  isFocusedLookup: boolean; 
+  targetMastery: number;
+  isFocusedLookup: boolean;
 }
 
-export interface LexiconItem extends VocabularyStat {
-  count: number; 
-  occurrences: any[];
+export interface LexemeEntry extends LexemeStat {
+  count: number; // total occurrences in text
+  firstEncounterProgress: number; // 0-1, derived for visualization
 }

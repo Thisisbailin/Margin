@@ -1,17 +1,10 @@
 import React from 'react';
-import {
-  AgentMessage,
-  Book,
-  PanelState,
-  Project,
-  Sentence,
-  UserProficiency,
-  WordOccurrence
-} from './types';
+import { AgentMessage, Document, PanelState, Project, Token, Span, UserProficiency, Block, TocEntry } from './types';
 import LayoutShell from './components/LayoutShell';
 import MarginSidebar from './components/MarginSidebar';
 import ProjectContext from './components/ProjectContext';
 import ReaderToken from './components/ReaderToken';
+import DocumentToc from './components/DocumentToc';
 
 interface ReaderPageProps {
   leftPanelState: PanelState;
@@ -19,17 +12,18 @@ interface ReaderPageProps {
   onLeftPanelStateChange: (state: PanelState) => void;
   onRightPanelStateChange: (state: PanelState) => void;
   activeProject: Project;
-  activeBook: Book | undefined;
-  onBookSelect: (book: Book) => void;
+  activeDocument: Document | undefined;
+  onDocumentSelect: (document: Document) => void;
   onEnterHome: () => void;
   isZenMode: boolean;
-  focusedSentenceId: string | null;
-  activeToken: WordOccurrence | null;
-  onSentenceClick: (sentence: Sentence) => void;
-  onTokenClick: (token: WordOccurrence) => void;
+  focusedSpanId: string | null;
+  activeToken: Token | null;
+  onSpanClick: (span: Span) => void;
+  onTokenClick: (token: Token) => void;
   messages: AgentMessage[];
   isAiLoading: boolean;
   userProficiency: UserProficiency;
+  getMasteryScore: (lemma: string) => number;
 }
 
 const ReaderPage: React.FC<ReaderPageProps> = ({
@@ -38,18 +32,123 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
   onLeftPanelStateChange,
   onRightPanelStateChange,
   activeProject,
-  activeBook,
-  onBookSelect,
+  activeDocument,
+  onDocumentSelect,
   onEnterHome,
   isZenMode,
-  focusedSentenceId,
+  focusedSpanId,
   activeToken,
-  onSentenceClick,
+  onSpanClick,
   onTokenClick,
   messages,
   isAiLoading,
-  userProficiency
+  userProficiency,
+  getMasteryScore
 }) => {
+  const [activeTocEntryId, setActiveTocEntryId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!activeDocument) return;
+    setActiveTocEntryId(activeDocument.toc[0]?.id || null);
+  }, [activeDocument]);
+
+  const tocTargets = React.useMemo(() => {
+    if (!activeDocument) return [];
+    const targetMap = new Map<string, (typeof activeDocument.toc)[number]>();
+    activeDocument.toc.forEach((entry) => {
+      const targetId = entry.anchorId || entry.sectionId;
+      if (!targetId || targetMap.has(targetId)) return;
+      targetMap.set(targetId, entry);
+    });
+    return Array.from(targetMap.entries()).map(([targetId, entry]) => ({ targetId, entry }));
+  }, [activeDocument]);
+
+  React.useEffect(() => {
+    if (!activeDocument) return;
+    const elements = tocTargets
+      .map((item) => document.getElementById(item.targetId))
+      .filter((el): el is HTMLElement => Boolean(el));
+    if (!elements.length) return;
+
+    const entryByTargetId = new Map(tocTargets.map((item) => [item.targetId, item.entry]));
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible.length) {
+          const entry = entryByTargetId.get(visible[0].target.id);
+          if (entry) {
+            setActiveTocEntryId(entry.id);
+          }
+        }
+      },
+      { root: null, rootMargin: '0px 0px -60% 0px', threshold: 0.1 }
+    );
+
+    elements.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [activeDocument, tocTargets]);
+
+  const handleTocSelect = (entry: TocEntry) => {
+    const targetId = entry.anchorId || entry.sectionId;
+    if (!targetId) return;
+    const targetEl = document.getElementById(targetId);
+    setActiveTocEntryId(entry.id);
+    if (targetEl) {
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const renderBlock = (block: Block, options?: { compact?: boolean; tone?: 'note' }) => {
+    const blockStyle: React.CSSProperties = {
+      ...(block.align ? { textAlign: block.align } : {}),
+      ...(block.indent
+        ? block.indentKind === 'margin'
+          ? { marginLeft: block.indent }
+          : { textIndent: block.indent }
+        : {}),
+      ...(block.lineHeight ? { lineHeight: block.lineHeight } : {}),
+      ...(block.spacingBefore ? { marginTop: block.spacingBefore } : {}),
+      ...(block.spacingAfter ? { marginBottom: block.spacingAfter } : {})
+    };
+
+    return (
+      <div
+        key={block.id}
+        id={block.id}
+        style={blockStyle}
+        className={`prose max-w-none ${
+          options?.compact ? 'mb-4 text-sm md:text-base leading-relaxed' : 'mb-8 prose-sm md:prose-lg'
+        } ${options?.tone === 'note' ? 'text-ink/70' : 'text-ink'}`}
+      >
+        {block.spans.map((span) => (
+          <span
+            key={span.id}
+            onClick={() => onSpanClick(span)}
+            className={`inline transition-all duration-500 rounded-sm cursor-pointer px-1 -mx-1 py-0.5 ${
+              focusedSpanId === span.id ? 'bg-accent/5 ring-1 ring-accent/10' : 'hover:bg-black/5'
+            }`}
+          >
+            {span.tokens.map((token) => (
+              <React.Fragment key={token.id}>
+                <ReaderToken
+                  token={token}
+                  masteryScore={getMasteryScore(token.lemma)}
+                  onClick={onTokenClick}
+                  isActive={activeToken?.id === token.id}
+                  isSentenceFocused={focusedSpanId === span.id}
+                  isZenMode={isZenMode}
+                />
+                {' '}
+              </React.Fragment>
+            ))}
+          </span>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="h-screen w-screen bg-paper text-ink font-sans flex flex-col md:flex-row overflow-hidden relative">
       <LayoutShell
@@ -66,11 +165,18 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
           >
             Back To Home
           </button>
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto no-scrollbar space-y-10 pr-2">
+            {activeDocument && (
+              <DocumentToc
+                toc={activeDocument.toc}
+                onSelect={handleTocSelect}
+                activeEntryId={activeTocEntryId}
+              />
+            )}
             <ProjectContext
               project={activeProject}
-              activeBookId={activeBook?.id}
-              onBookSelect={onBookSelect}
+              activeDocumentId={activeDocument?.id}
+              onDocumentSelect={onDocumentSelect}
               showImport={false}
             />
           </div>
@@ -88,43 +194,40 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
           <header className="mb-16 md:mb-28 text-center animate-fade-in">
             <div className="text-[10px] uppercase tracking-[0.4em] text-accent font-bold mb-6">Current Reading</div>
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-display text-ink mb-6 md:mb-10 tracking-tight leading-[1.1]">
-              {activeBook?.title}
+              {activeDocument?.title}
             </h1>
-            <div className="text-xs md:text-sm font-serif italic text-gray-400">by {activeBook?.author}</div>
+            {activeDocument?.author && (
+              <div className="text-xs md:text-sm font-serif italic text-gray-400">by {activeDocument.author}</div>
+            )}
           </header>
 
           <div className="space-y-12 md:space-y-24">
-            {activeBook?.chapters.map((chapter) => (
-              <section key={chapter.id} className="animate-fade-in">
+            {activeDocument?.sections.map((section) => (
+              <section key={section.id} id={section.id} className="animate-fade-in">
                 <div className="mb-8 md:mb-12 border-b border-black/5 pb-4">
-                  <h2 className="font-display text-lg md:text-2xl italic text-ink/40">{chapter.title}</h2>
+                  <h2 className="font-display text-lg md:text-2xl italic text-ink/40">{section.title}</h2>
                 </div>
-                {chapter.content.map((para) => (
-                  <div key={para.id} className="mb-8 prose prose-sm md:prose-lg max-w-none">
-                    {para.sentences.map((sentence) => (
-                      <span
-                        key={sentence.id}
-                        onClick={() => onSentenceClick(sentence)}
-                        className={`inline transition-all duration-500 rounded-sm cursor-pointer px-1 -mx-1 py-0.5 ${
-                          focusedSentenceId === sentence.id ? 'bg-accent/5 ring-1 ring-accent/10' : 'hover:bg-black/5'
-                        }`}
-                      >
-                        {sentence.tokens.map((token) => (
-                          <React.Fragment key={token.id}>
-                            <ReaderToken
-                              token={token}
-                              onClick={onTokenClick}
-                              isActive={activeToken?.id === token.id}
-                              isSentenceFocused={focusedSentenceId === sentence.id}
-                              isZenMode={isZenMode}
-                            />
-                            {' '}
-                          </React.Fragment>
-                        ))}
-                      </span>
-                    ))}
+                {section.blocks.filter((block) => !block.noteType).map((block) => renderBlock(block))}
+                {section.blocks.some((block) => block.noteType) && (
+                  <div className="mt-10 md:mt-16 border border-black/5 bg-white/60 rounded-3xl p-6 md:p-8 shadow-soft space-y-6">
+                    {section.blocks.some((block) => block.noteType === 'footnote') && (
+                      <div className="space-y-3">
+                        <div className="text-[9px] uppercase tracking-[0.3em] text-accent font-bold">Footnotes</div>
+                        {section.blocks
+                          .filter((block) => block.noteType === 'footnote')
+                          .map((block) => renderBlock(block, { compact: true, tone: 'note' }))}
+                      </div>
+                    )}
+                    {section.blocks.some((block) => block.noteType === 'endnote') && (
+                      <div className="space-y-3">
+                        <div className="text-[9px] uppercase tracking-[0.3em] text-accent font-bold">Endnotes</div>
+                        {section.blocks
+                          .filter((block) => block.noteType === 'endnote')
+                          .map((block) => renderBlock(block, { compact: true, tone: 'note' }))}
+                      </div>
+                    )}
                   </div>
-                ))}
+                )}
               </section>
             ))}
           </div>

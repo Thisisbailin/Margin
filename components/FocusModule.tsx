@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { Project, Book, AgentMessage, LexiconItem } from '../types';
+import { Project, Document, AgentMessage, LexemeEntry, LexemeStat } from '../types';
 import HomeProject from './home/HomeProject';
 import HomeTerrain from './home/HomeTerrain';
 import HomeMeditation from './home/HomeMeditation';
@@ -8,18 +7,18 @@ import AccountMenu from './account/AccountMenu';
 
 interface FocusModuleProps {
   activeProject: Project;
-  activeBook: Book | undefined;
-  onBookSelect: (book: Book) => void;
+  activeDocument: Document | undefined;
+  onDocumentSelect: (document: Document) => void;
   projectMessages: AgentMessage[];
   projectInput: string;
   setProjectInput: (val: string) => void;
   onProjectChat: () => void;
   isProjectChatLoading: boolean;
-  projectLexicon: LexiconItem[];
+  projectLexicon: LexemeEntry[];
   readingProgress: number;
-  recordInteraction: (lemma: string, type: 'implicit' | 'explicit', weight: number, occurrenceId: string) => void;
+  recordInteraction: (lemma: string, type: 'implicit' | 'explicit', weight: number, occurrenceId?: string) => void;
+  updateLexeme: (lemma: string, updates: Partial<LexemeStat>) => void;
   generateWordDefinition: (word: string) => Promise<string>;
-  // Added onImportClick to props interface
   onImportClick: () => void;
   userId?: string;
   onOpenTraffic: () => void;
@@ -28,8 +27,8 @@ interface FocusModuleProps {
 
 const FocusModule: React.FC<FocusModuleProps> = ({
   activeProject,
-  activeBook,
-  onBookSelect,
+  activeDocument,
+  onDocumentSelect,
   projectMessages,
   projectInput,
   setProjectInput,
@@ -38,6 +37,7 @@ const FocusModule: React.FC<FocusModuleProps> = ({
   projectLexicon,
   readingProgress,
   recordInteraction,
+  updateLexeme,
   generateWordDefinition,
   onImportClick,
   userId,
@@ -49,7 +49,7 @@ const FocusModule: React.FC<FocusModuleProps> = ({
   const navItems = [
     { key: 'project' as const, label: 'Project' },
     { key: 'terrain' as const, label: 'Terrain' },
-    { key: 'meditation' as const, label: 'Meditation' },
+    { key: 'meditation' as const, label: 'Meditation' }
   ];
 
   return (
@@ -71,12 +71,11 @@ const FocusModule: React.FC<FocusModuleProps> = ({
         <AccountMenu onOpenTraffic={onOpenTraffic} onOpenSettings={onOpenSettings} />
       </div>
 
-      {/* 视图内容 */}
       {view === 'project' ? (
         <HomeProject
           activeProject={activeProject}
-          activeBook={activeBook}
-          onBookSelect={onBookSelect}
+          activeDocument={activeDocument}
+          onDocumentSelect={onDocumentSelect}
           projectMessages={projectMessages}
           projectInput={projectInput}
           setProjectInput={setProjectInput}
@@ -89,14 +88,11 @@ const FocusModule: React.FC<FocusModuleProps> = ({
           projectLexicon={projectLexicon}
           readingProgress={readingProgress}
           recordInteraction={recordInteraction}
+          updateLexeme={updateLexeme}
           generateWordDefinition={generateWordDefinition}
         />
       ) : (
-        <HomeMeditation
-          userId={userId}
-          projectId={activeProject.id}
-          bookId={activeBook?.id}
-        />
+        <HomeMeditation userId={userId} projectId={activeProject.id} bookId={activeDocument?.id} />
       )}
     </div>
   );

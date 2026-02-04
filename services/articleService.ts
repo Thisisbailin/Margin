@@ -1,5 +1,3 @@
-
-import { Chapter, Paragraph } from "../types";
 import { generateLLM } from "./llmClient";
 import { getModelForTier } from "./llmConfig";
 
@@ -13,18 +11,23 @@ const fetchUrlContent = async (url: string): Promise<string> => {
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml'
-      },
-      // 注意：由于浏览器安全策略，许多站点会拒绝跨域 fetch。
-      // 在本地开发或有代理的情况下可工作。
+        Accept: 'text/html,application/xhtml+xml,application/xml'
+      }
     });
-    
+
     if (!response.ok) throw new Error(`Status ${response.status}`);
     return await response.text();
   } catch (error) {
-    console.error("Fetch failed, requesting fallback to manual paste.", error);
-    throw new Error("Could not access the URL directly due to CORS or site restrictions. Please copy and paste the article text manually.");
+    console.error('Fetch failed, requesting fallback to manual paste.', error);
+    throw new Error('Could not access the URL directly due to CORS or site restrictions. Please copy and paste the article text manually.');
   }
+};
+
+export type ParsedArticle = {
+  title: string;
+  author?: string;
+  language?: string;
+  sections: { title: string; content: string }[];
 };
 
 /**
@@ -35,7 +38,7 @@ export const ingestArticleContent = async (
   titleHint: string,
   isUrl: boolean,
   metadata?: Record<string, string>
-): Promise<Chapter> => {
+): Promise<ParsedArticle> => {
   let contentToAnalyze = input;
 
   if (isUrl) {
@@ -44,7 +47,7 @@ export const ingestArticleContent = async (
 
   const prompt = `
     你是一个专业的内容结构化专家。你收到了以下${isUrl ? 'HTML 源代码' : '原始文本'}。
-    
+
     你的任务：
     1. 提取文章的【标题】(Title) 和 【作者】(Author)。
     2. 提取核心正文内容。请剔除侧边栏、导航栏、底部版权、广告等噪音。
@@ -54,7 +57,7 @@ export const ingestArticleContent = async (
     6. 将内容拆分为段落(paragraphs)，每个段落拆分为句子(sentences)。
 
     参考标题/来源: ${titleHint} ${isUrl ? `(URL: ${input})` : ''}
-    
+
     待处理内容（截断至 20000 字符）:
     ${contentToAnalyze.substring(0, 20000)}
   `;
@@ -71,24 +74,24 @@ export const ingestArticleContent = async (
 只返回 JSON，不要输出其他文字。`;
 
   const response = await generateLLM({
-    model: getModelForTier("L2") || "L2",
+    model: getModelForTier('L2') || 'L2',
     messages: [
-      { role: "system", content: "你是一个严谨的内容结构化引擎，只输出 JSON。" },
-      { role: "user", content: `${prompt}\n\n${schemaHint}` },
+      { role: 'system', content: '你是一个严谨的内容结构化引擎，只输出 JSON。' },
+      { role: 'user', content: `${prompt}\n\n${schemaHint}` }
     ],
     metadata: {
-      source: "app",
-      feature: "article_ingest",
-      ...(metadata || {}),
-    },
+      source: 'app',
+      feature: 'article_ingest',
+      ...(metadata || {})
+    }
   });
 
   const parseJson = (text: string): any => {
     try {
       return JSON.parse(text);
     } catch {
-      const start = text.indexOf("{");
-      const end = text.lastIndexOf("}");
+      const start = text.indexOf('{');
+      const end = text.lastIndexOf('}');
       if (start >= 0 && end > start) {
         try {
           return JSON.parse(text.slice(start, end + 1));
@@ -98,39 +101,26 @@ export const ingestArticleContent = async (
     }
   };
 
-  const data = parseJson(response.text || "");
-  
+  const data = parseJson(response.text || '');
+
   if (!data.paragraphs || data.paragraphs.length === 0) {
-    throw new Error("Failed to extract meaningful paragraphs from the source.");
+    throw new Error('Failed to extract meaningful paragraphs from the source.');
   }
 
-  const processedParagraphs: Paragraph[] = data.paragraphs.map((p: any, pIdx: number) => {
-    return {
-      id: `ingested-p-${pIdx}-${Date.now()}`,
-      type: (p.type === 'poetry' || p.type === 'dialogue') ? p.type : 'prose',
-      sentences: p.sentences.map((sText: string, sIdx: number) => {
-        // 词汇化处理
-        const words = sText.trim().split(/\s+/).filter(w => w.length > 0);
-        return {
-          id: `ingested-s-${pIdx}-${sIdx}-${Date.now()}`,
-          text: sText,
-          tokens: words.map((w, wIdx) => ({
-            id: `ingested-w-${pIdx}-${sIdx}-${wIdx}-${Date.now()}`,
-            text: w,
-            lemma: w.replace(/[.,!?;:«»"()]/g, '').toLowerCase(),
-            pos: 'unknown',
-            masteryScore: 0
-          }))
-        };
-      })
-    };
-  });
+  const content = data.paragraphs
+    .map((p: any) => (p.sentences || []).join(' '))
+    .filter(Boolean)
+    .join('\n\n');
 
   return {
-    id: `ch-ingested-${Date.now()}`,
-    number: 1,
     title: data.title || titleHint,
-    subtitle: data.author ? `by ${data.author}` : undefined,
-    content: processedParagraphs
+    author: data.author,
+    language: data.language,
+    sections: [
+      {
+        title: data.title || titleHint || 'Section',
+        content
+      }
+    ]
   };
 };

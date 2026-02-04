@@ -23,13 +23,11 @@ const getContextValue = (context: Record<string, unknown> | undefined, key: stri
   return stringify(context[key]);
 };
 
-export const buildMessages = (
-  request: AgentRequest
-): { messages: LLMMessage[]; model: string } => {
+export const buildMessages = (request: AgentRequest): { messages: LLMMessage[]; model: string } => {
   if (Array.isArray(request.messages) && request.messages.length > 0) {
     return {
       messages: request.messages,
-      model: request.model || defaultModelForTask(request.task),
+      model: request.model || defaultModelForTask(request.task)
     };
   }
 
@@ -46,18 +44,16 @@ export const buildMessages = (
   }
 
   if (task === "annotation") {
-    const bookTitle = getContextValue(context, "bookTitle") || "Unknown";
-    const targetSentence = getContextValue(context, "targetSentence") || input;
-    const surrounding = getContextValue(context, "surroundingContext") || targetSentence;
+    const documentTitle = getContextValue(context, "documentTitle") || "Unknown";
+    const targetText = getContextValue(context, "targetText") || input;
+    const surrounding = getContextValue(context, "surroundingContext") || targetText;
     const mastery = getContextValue(context, "targetMastery");
-    const adaptation = mastery
-      ? `当前掌握度: ${mastery}`
-      : "";
+    const adaptation = mastery ? `当前掌握度: ${mastery}` : "";
 
     prompt = `你是一款名为 Margin 的 AI 深度阅读助手。
-上下文: 《${bookTitle}》
+上下文: 《${documentTitle}》
 ${adaptation}
-指令: 针对语境 "${surrounding}" 中的 "${targetSentence}" 进行详细解读。`;
+指令: 针对语境 "${surrounding}" 中的 "${targetText}" 进行详细解读。`;
   }
 
   if (task === "project") {
@@ -80,15 +76,13 @@ ${adaptation}
 
   return {
     messages,
-    model: request.model || defaultModelForTask(task),
+    model: request.model || defaultModelForTask(task)
   };
 };
 
 const formatTools = (tools: ToolDefinition[]): string => {
   if (!tools.length) return "No tools available.";
-  return tools
-    .map((tool) => `- ${tool.name}: ${tool.description}`)
-    .join("\n");
+  return tools.map((tool) => `- ${tool.name}: ${tool.description}`).join("\n");
 };
 
 export const buildPlanMessages = (baseMessages: LLMMessage[], tools: ToolDefinition[]): LLMMessage[] => {
@@ -115,17 +109,12 @@ export const buildActMessages = (
   toolResults: ToolResult[]
 ): LLMMessage[] => {
   const system = `You are an execution agent. Use the plan and tool results (if any) to answer the user. Respond in the user's language.`;
-  const toolText = toolResults.length
-    ? JSON.stringify(toolResults, null, 2)
-    : "[]";
+  const toolText = toolResults.length ? JSON.stringify(toolResults, null, 2) : "[]";
   const user = `Plan:\n${plan || "N/A"}\n\nTool Results:\n${toolText}`;
   return [{ role: "system", content: system }, ...baseMessages, { role: "user", content: user }];
 };
 
-export const buildReflectMessages = (
-  baseMessages: LLMMessage[],
-  draft: string
-): LLMMessage[] => {
+export const buildReflectMessages = (baseMessages: LLMMessage[], draft: string): LLMMessage[] => {
   const system = `You are a reviewer. Improve the draft answer for correctness and completeness. Keep it concise and respond in the user's language.`;
   const user = `Draft Answer:\n${draft}`;
   return [{ role: "system", content: system }, ...baseMessages, { role: "user", content: user }];

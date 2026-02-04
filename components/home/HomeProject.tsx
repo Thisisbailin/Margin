@@ -1,12 +1,12 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
-import { AgentMessage, Book, Project } from '../../types';
+import { AgentMessage, Document, Project } from '../../types';
 import ProjectContext from '../ProjectContext';
 
 interface HomeProjectProps {
   activeProject: Project;
-  activeBook: Book | undefined;
-  onBookSelect: (book: Book) => void;
+  activeDocument: Document | undefined;
+  onDocumentSelect: (document: Document) => void;
   projectMessages: AgentMessage[];
   projectInput: string;
   setProjectInput: (val: string) => void;
@@ -17,8 +17,8 @@ interface HomeProjectProps {
 
 const HomeProject: React.FC<HomeProjectProps> = ({
   activeProject,
-  activeBook,
-  onBookSelect,
+  activeDocument,
+  onDocumentSelect,
   projectMessages,
   projectInput,
   setProjectInput,
@@ -36,8 +36,8 @@ const HomeProject: React.FC<HomeProjectProps> = ({
         <div className="flex-1 overflow-y-auto no-scrollbar">
           <ProjectContext
             project={activeProject}
-            activeBookId={activeBook?.id}
-            onBookSelect={onBookSelect}
+            activeDocumentId={activeDocument?.id}
+            onDocumentSelect={onDocumentSelect}
             onImportClick={onImportClick}
           />
         </div>
@@ -53,7 +53,11 @@ const HomeProject: React.FC<HomeProjectProps> = ({
           ) : (
             projectMessages.map((m) => (
               <div key={m.id} className={`max-w-2xl ${m.role === 'user' ? 'ml-auto' : 'mr-auto'}`}>
-                <div className={`text-[9px] uppercase tracking-widest text-gray-400 mb-3 ${m.role === 'user' ? 'text-right' : ''}`}>
+                <div
+                  className={`text-[9px] uppercase tracking-widest text-gray-400 mb-3 ${
+                    m.role === 'user' ? 'text-right' : ''
+                  }`}
+                >
                   {m.role === 'agent' ? 'Project Mentor' : 'Researcher'}
                 </div>
                 <div className={`prose prose-sm font-serif ${m.role === 'user' ? 'bg-accent/5 p-6 rounded-3xl italic' : 'text-ink'}`}>

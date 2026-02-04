@@ -1,11 +1,12 @@
 import React from 'react';
-import { LexiconItem } from '../../types';
+import { LexemeEntry, LexemeStat } from '../../types';
 import TerrainMap from '../TerrainMap';
 
 interface HomeTerrainProps {
-  projectLexicon: LexiconItem[];
+  projectLexicon: LexemeEntry[];
   readingProgress: number;
-  recordInteraction: (lemma: string, type: 'implicit' | 'explicit', weight: number, occurrenceId: string) => void;
+  recordInteraction: (lemma: string, type: 'implicit' | 'explicit', weight: number, occurrenceId?: string) => void;
+  updateLexeme: (lemma: string, updates: Partial<LexemeStat>) => void;
   generateWordDefinition: (word: string) => Promise<string>;
 }
 
@@ -13,6 +14,7 @@ const HomeTerrain: React.FC<HomeTerrainProps> = ({
   projectLexicon,
   readingProgress,
   recordInteraction,
+  updateLexeme,
   generateWordDefinition
 }) => {
   return (
@@ -20,8 +22,9 @@ const HomeTerrain: React.FC<HomeTerrainProps> = ({
       <TerrainMap
         lexicon={projectLexicon}
         bookProgress={readingProgress}
-        onUpdateLexicon={(lemma, _updates) => recordInteraction(lemma, 'explicit', 0.5, 'deck-review')}
+        onUpdateLexicon={updateLexeme}
         onGenerateDefinition={generateWordDefinition}
+        onReviewLemma={(lemma) => recordInteraction(lemma, 'explicit', 0.5)}
         onNavigateToContext={() => {}}
         isExpanded={true}
       />
