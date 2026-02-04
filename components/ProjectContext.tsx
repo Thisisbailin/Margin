@@ -31,43 +31,49 @@ const ProjectContext: React.FC<ProjectContextProps> = ({
       )}
 
       <div className="flex-1 space-y-4">
-        {project.documents.map((doc) => (
-          <div
-            key={doc.id}
-            onClick={() => onDocumentSelect(doc)}
-            className={`
-              group cursor-pointer rounded-2xl p-4 transition-all duration-500 relative
-              ${doc.id === activeDocumentId ? 'bg-white shadow-soft ring-1 ring-black/5 scale-[1.02]' : 'hover:bg-white/40 text-gray-500'}
-            `}
-          >
-            <div className="flex justify-between items-start">
-              <div className="flex-1 pr-4">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span
-                    className={`text-[8px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded-full ${
-                      doc.type === DocumentType.Book ? 'bg-secondary/10 text-secondary' : 'bg-accent/10 text-accent'
+        {project.documents.length === 0 ? (
+          <div className="border border-dashed border-black/10 rounded-2xl p-6 text-center text-sm font-serif italic text-gray-400">
+            No materials yet. Import an EPUB to begin.
+          </div>
+        ) : (
+          project.documents.map((doc) => (
+            <div
+              key={doc.id}
+              onClick={() => onDocumentSelect(doc)}
+              className={`
+                group cursor-pointer rounded-2xl p-4 transition-all duration-500 relative
+                ${doc.id === activeDocumentId ? 'bg-white shadow-soft ring-1 ring-black/5 scale-[1.02]' : 'hover:bg-white/40 text-gray-500'}
+              `}
+            >
+              <div className="flex justify-between items-start">
+                <div className="flex-1 pr-4">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span
+                      className={`text-[8px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded-full ${
+                        doc.type === DocumentType.Book ? 'bg-secondary/10 text-secondary' : 'bg-accent/10 text-accent'
+                      }`}
+                    >
+                      {doc.type}
+                    </span>
+                  </div>
+                  <h3
+                    className={`font-serif text-[14px] leading-snug transition-colors ${
+                      doc.id === activeDocumentId ? 'text-ink font-medium' : 'group-hover:text-ink'
                     }`}
                   >
-                    {doc.type}
-                  </span>
+                    {doc.title}
+                  </h3>
+                  {doc.author && (
+                    <p className="text-[9px] uppercase tracking-widest text-gray-400 mt-2 font-medium">{doc.author}</p>
+                  )}
                 </div>
-                <h3
-                  className={`font-serif text-[14px] leading-snug transition-colors ${
-                    doc.id === activeDocumentId ? 'text-ink font-medium' : 'group-hover:text-ink'
-                  }`}
-                >
-                  {doc.title}
-                </h3>
-                {doc.author && (
-                  <p className="text-[9px] uppercase tracking-widest text-gray-400 mt-2 font-medium">{doc.author}</p>
+                {doc.id === activeDocumentId && (
+                  <div className="w-1.5 h-1.5 rounded-full bg-accent mt-2 shadow-[0_0_12px_rgba(194,142,91,0.8)]" />
                 )}
               </div>
-              {doc.id === activeDocumentId && (
-                <div className="w-1.5 h-1.5 rounded-full bg-accent mt-2 shadow-[0_0_12px_rgba(194,142,91,0.8)]" />
-              )}
             </div>
-          </div>
-        ))}
+          ))
+        )}
 
         {showImport && (
           <button

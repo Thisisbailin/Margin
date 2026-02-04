@@ -1,5 +1,6 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import type { Document, InteractionLog, LexemeIndex, Project } from '../types';
 
 /**
  * 辅助函数：从多源获取环境变量
@@ -52,6 +53,8 @@ if (isLikelySupabaseUrl(supabaseUrl) && supabaseKey) {
 
 const BUCKET_NAME = 'margin_books';
 const AVATAR_BUCKET_NAME = 'margin_avatars';
+const PROJECT_TABLE = 'margin_projects';
+const DOCUMENT_TABLE = 'margin_documents';
 
 /**
  * 上传 EPUB 到 Supabase Storage (按用户隔离)
@@ -128,5 +131,134 @@ export const uploadAvatarToSupabase = async (
   } catch (error) {
     console.error('Supabase Avatar Upload Error:', error);
     return { path: '', publicUrl: '' };
+  }
+};
+
+export type StoredProjectRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string;
+  lexeme_index?: LexemeIndex | null;
+  interaction_log?: InteractionLog | null;
+  active_document_id?: string | null;
+};
+
+export type StoredDocumentRow = {
+  id: string;
+  user_id: string;
+  project_id: string;
+  data: Document;
+  title?: string | null;
+  author?: string | null;
+  language?: string | null;
+  type?: string | null;
+};
+
+export const isSupabaseReady = (): boolean => Boolean(supabase);
+
+export const upsertProjectSnapshot = async (
+  project: Project,
+  userId: string,
+  activeDocumentId?: string
+): Promise<boolean> => {
+  if (!supabase) {
+    console.warn("Supabase not available for project upsert.");
+    return false;
+  }
+
+  const payload: StoredProjectRow & { updated_at: string } = {
+    id: project.id,
+    user_id: userId,
+    name: project.name,
+    description: project.description,
+    lexeme_index: project.lexemeIndex,
+    interaction_log: project.interactionLog,
+    active_document_id: activeDocumentId ?? null,
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    const { error } = await supabase
+      .from(PROJECT_TABLE)
+      .upsert(payload, { onConflict: 'id' });
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Supabase Project Upsert Error:', error);
+    return false;
+  }
+};
+
+export const upsertDocumentSnapshot = async (
+  document: Document,
+  projectId: string,
+  userId: string
+): Promise<boolean> => {
+  if (!supabase) {
+    console.warn("Supabase not available for document upsert.");
+    return false;
+  }
+
+  const payload: StoredDocumentRow & { updated_at: string } = {
+    id: document.id,
+    user_id: userId,
+    project_id: projectId,
+    data: document,
+    title: document.title,
+    author: document.author ?? null,
+    language: document.language ?? null,
+    type: document.type,
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    const { error } = await supabase
+      .from(DOCUMENT_TABLE)
+      .upsert(payload, { onConflict: 'id' });
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Supabase Document Upsert Error:', error);
+    return false;
+  }
+};
+
+export const fetchProjectSnapshot = async (
+  userId: string
+): Promise<{ project: StoredProjectRow; documents: Document[] } | null> => {
+  if (!supabase) {
+    console.warn("Supabase not available for fetch.");
+    return null;
+  }
+
+  try {
+    const { data: projectRows, error: projectError } = await supabase
+      .from(PROJECT_TABLE)
+      .select('id,user_id,name,description,lexeme_index,interaction_log,active_document_id,updated_at')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+
+    if (projectError) throw projectError;
+    const project = projectRows?.[0] as StoredProjectRow | undefined;
+    if (!project) return null;
+
+    const { data: docRows, error: docError } = await supabase
+      .from(DOCUMENT_TABLE)
+      .select('data')
+      .eq('user_id', userId)
+      .eq('project_id', project.id)
+      .order('created_at', { ascending: true });
+
+    if (docError) throw docError;
+    const documents = (docRows || [])
+      .map((row: { data?: Document | null }) => row.data)
+      .filter(Boolean) as Document[];
+
+    return { project, documents };
+  } catch (error) {
+    console.error('Supabase Fetch Project Error:', error);
+    return null;
   }
 };

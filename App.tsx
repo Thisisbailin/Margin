@@ -17,7 +17,7 @@ import {
 } from './types';
 import { MOCK_PROJECT } from './constants';
 import { streamAnnotation, generateWordDefinition, streamProjectChat } from './services/llmService';
-import { uploadEpubToSupabase } from './services/supabaseService';
+import { fetchProjectSnapshot, upsertDocumentSnapshot, upsertProjectSnapshot, uploadEpubToSupabase } from './services/supabaseService';
 import { buildDocumentFromBlocks, buildProjectIndexes } from './services/documentBuilder';
 import type { ParsedEpub } from './services/epubService';
 import manifesto from './docs/margin-manifesto.md?raw';
@@ -129,6 +129,46 @@ const MarginApp: React.FC = () => {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [focusedSpanId, setFocusedSpanId] = useState<string | null>(null);
   const [activeToken, setActiveToken] = useState<Token | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+
+    const hydrateFromSupabase = async () => {
+      const snapshot = await fetchProjectSnapshot(user.id);
+      if (cancelled || !snapshot) return;
+
+      const { project, documents } = snapshot;
+      if (!documents.length) return;
+
+      const { occurrenceIndex, lexemeIndex, interactionLog } = buildProjectIndexes(
+        documents,
+        project.lexeme_index || undefined,
+        project.interaction_log || undefined
+      );
+
+      const nextProject: Project = {
+        id: project.id,
+        name: project.name || 'Margin Project',
+        description: project.description || '',
+        documents,
+        occurrenceIndex,
+        lexemeIndex,
+        interactionLog
+      };
+
+      setActiveProject(nextProject);
+      const nextDoc =
+        documents.find((doc) => doc.id === project.active_document_id) || documents[0];
+      setActiveDocument(nextDoc);
+    };
+
+    hydrateFromSupabase();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const handleDocumentSelect = useCallback((document: Document) => {
     setActiveDocument(document);
@@ -247,17 +287,22 @@ const MarginApp: React.FC = () => {
 
       await uploadEpubToSupabase(originalFile, documentId, user.id);
 
-      setActiveProject((prev) => {
-        const documents = [...prev.documents, newDocument];
-        const indexes = buildProjectIndexes(documents, prev.lexemeIndex, prev.interactionLog);
-        return {
-          ...prev,
-          documents,
-          occurrenceIndex: indexes.occurrenceIndex,
-          lexemeIndex: indexes.lexemeIndex,
-          interactionLog: indexes.interactionLog
-        };
-      });
+      const nextDocuments = [...activeProject.documents, newDocument];
+      const indexes = buildProjectIndexes(nextDocuments, activeProject.lexemeIndex, activeProject.interactionLog);
+      const nextProject: Project = {
+        ...activeProject,
+        documents: nextDocuments,
+        occurrenceIndex: indexes.occurrenceIndex,
+        lexemeIndex: indexes.lexemeIndex,
+        interactionLog: indexes.interactionLog
+      };
+
+      await upsertProjectSnapshot(nextProject, user.id, newDocument.id);
+      await Promise.all(
+        nextDocuments.map((doc) => upsertDocumentSnapshot(doc, nextProject.id, user.id))
+      );
+
+      setActiveProject(nextProject);
       setActiveDocument(newDocument);
       setLeftPanelState('collapsed');
     } catch (err) {

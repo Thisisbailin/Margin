@@ -58,6 +58,10 @@ const HomeProject: React.FC<HomeProjectProps> = ({
           <div className="pt-2 border-t border-black/5">
             <div className="text-[9px] uppercase tracking-[0.3em] text-gray-400 font-bold">Materials</div>
             <div className="text-xs font-serif text-gray-400 italic mt-1">{materialCount} items in this project</div>
+            <div className="text-[10px] uppercase tracking-[0.25em] text-gray-300 font-bold mt-4">
+              Supports Book / Article
+            </div>
+            <div className="text-[11px] font-serif italic text-gray-400 mt-1">Current import: EPUB only</div>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto no-scrollbar">
