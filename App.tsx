@@ -450,18 +450,24 @@ const MarginApp: React.FC = () => {
   };
 
   useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth < 768) {
-        setLeftPanelState('collapsed');
-        setRightPanelState('collapsed');
-      }
-    };
+    const isMobile = () => window.innerWidth < 768;
+    let wasMobile = isMobile();
 
-    window.addEventListener('resize', handleResize);
-    if (window.innerWidth < 768) {
+    if (wasMobile) {
       setLeftPanelState('collapsed');
       setRightPanelState('collapsed');
     }
+
+    const handleResize = () => {
+      const nowMobile = isMobile();
+      if (!wasMobile && nowMobile) {
+        setLeftPanelState('collapsed');
+        setRightPanelState('collapsed');
+      }
+      wasMobile = nowMobile;
+    };
+
+    window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
