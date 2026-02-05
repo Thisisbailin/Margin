@@ -46,7 +46,15 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
   getMasteryScore
 }) => {
   const [activeTocEntryId, setActiveTocEntryId] = React.useState<string | null>(null);
-  const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : false;
+  const [isMobile, setIsMobile] = React.useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const toggleLeftPanel = () => {
     const nextState = leftPanelState === 'collapsed' ? 'default' : 'collapsed';
@@ -216,7 +224,7 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
         className={`h-full w-full overflow-y-auto no-scrollbar flex-1 relative transition-all duration-700 ${
           leftPanelState === 'expanded' || rightPanelState === 'expanded'
             ? 'md:opacity-0 md:scale-95 md:translate-y-4'
-            : 'opacity-100 scale-100 translate-y-0'
+            : 'md:opacity-100 md:scale-100 md:translate-y-0'
         }`}
       >
         <div className="mx-auto px-4 md:px-12 py-20 md:py-32 max-w-2xl">
@@ -266,41 +274,42 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
           </footer>
         </div>
 
-        <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-1/2 -translate-x-1/2 z-40">
-          <div className="flex items-center gap-2 md:gap-3 px-2 py-2 md:px-3 md:py-3 rounded-full bg-white/80 backdrop-blur-sm border border-black/5 shadow-float">
-            <button
-              onClick={toggleLeftPanel}
-              className={`flex items-center gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-full text-[10px] md:text-[11px] font-bold uppercase tracking-widest transition-all ${
-                leftPanelState !== 'collapsed'
-                  ? 'bg-ink text-white'
-                  : 'bg-white text-ink hover:bg-surface'
-              }`}
-              aria-label="Toggle landscape panel"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
-              </svg>
-              <span className="md:hidden">目录</span>
-              <span className="hidden md:inline">Landscape</span>
-            </button>
-            <button
-              onClick={toggleRightPanel}
-              className={`flex items-center gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-full text-[10px] md:text-[11px] font-bold uppercase tracking-widest transition-all ${
-                rightPanelState !== 'collapsed'
-                  ? 'bg-ink text-white'
-                  : 'bg-white text-ink hover:bg-surface'
-              }`}
-              aria-label="Toggle margin panel"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 0 1-.923 1.785c-.442.496.103 1.228.718 1.025a5.503 5.503 0 0 0 2.316-1.392l.06-.06c.397-.396.944-.606 1.48-.544 1.157.133 2.344.204 3.551.204Z" />
-              </svg>
-              <span className="md:hidden">边注</span>
-              <span className="hidden md:inline">Margin</span>
-            </button>
-          </div>
-        </div>
       </main>
+
+      <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-1/2 -translate-x-1/2 z-40">
+        <div className="flex items-center gap-2 md:gap-3 px-2 py-2 md:px-3 md:py-3 rounded-full bg-white/80 backdrop-blur-sm border border-black/5 shadow-float">
+          <button
+            onClick={toggleLeftPanel}
+            className={`flex items-center gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-full text-[10px] md:text-[11px] font-bold uppercase tracking-widest transition-all ${
+              leftPanelState !== 'collapsed'
+                ? 'bg-ink text-white'
+                : 'bg-white text-ink hover:bg-surface'
+            }`}
+            aria-label="Toggle landscape panel"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+            </svg>
+            <span className="md:hidden">目录</span>
+            <span className="hidden md:inline">Landscape</span>
+          </button>
+          <button
+            onClick={toggleRightPanel}
+            className={`flex items-center gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-full text-[10px] md:text-[11px] font-bold uppercase tracking-widest transition-all ${
+              rightPanelState !== 'collapsed'
+                ? 'bg-ink text-white'
+                : 'bg-white text-ink hover:bg-surface'
+            }`}
+            aria-label="Toggle margin panel"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 0 1-.923 1.785c-.442.496.103 1.228.718 1.025a5.503 5.503 0 0 0 2.316-1.392l.06-.06c.397-.396.944-.606 1.48-.544 1.157.133 2.344.204 3.551.204Z" />
+            </svg>
+            <span className="md:hidden">边注</span>
+            <span className="hidden md:inline">Margin</span>
+          </button>
+        </div>
+      </div>
 
       <LayoutShell
         side="right"
