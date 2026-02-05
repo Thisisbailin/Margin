@@ -29,6 +29,13 @@ export type StoredProjectRow = {
   lexeme_index?: LexemeIndex | null;
   interaction_log?: InteractionLog | null;
   active_document_id?: string | null;
+  updated_at?: string | null;
+};
+
+export type ProjectMetaRow = {
+  id: string;
+  active_document_id?: string | null;
+  updated_at?: string | null;
 };
 
 export const uploadEpubToSupabase = async (
@@ -97,10 +104,10 @@ export const upsertProjectSnapshot = async (
   project: Project,
   authToken: string,
   activeDocumentId?: string
-): Promise<boolean> => {
+): Promise<StoredProjectRow | null> => {
   if (!authToken) {
     console.warn('Missing auth token for project upsert.');
-    return false;
+    return null;
   }
 
   const res = await requestJson(`${API_BASE}/project`, {
@@ -111,10 +118,11 @@ export const upsertProjectSnapshot = async (
 
   if (!res.ok) {
     console.error('Project upsert failed', await res.text());
-    return false;
+    return null;
   }
 
-  return true;
+  const data = (await res.json()) as { project?: StoredProjectRow | null };
+  return data.project || null;
 };
 
 export const upsertDocumentSnapshot = async (
@@ -162,4 +170,25 @@ export const fetchProjectSnapshot = async (
   if (!data.project) return null;
 
   return { project: data.project, documents: data.documents || [] };
+};
+
+export const fetchProjectMeta = async (
+  authToken: string
+): Promise<ProjectMetaRow | null> => {
+  if (!authToken) {
+    console.warn('Missing auth token for fetch.');
+    return null;
+  }
+
+  const res = await requestJson(`${API_BASE}/meta`, {
+    token: authToken
+  });
+
+  if (!res.ok) {
+    console.error('Fetch meta failed', await res.text());
+    return null;
+  }
+
+  const data = (await res.json()) as { project?: ProjectMetaRow | null };
+  return data.project || null;
 };

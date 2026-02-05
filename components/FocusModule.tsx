@@ -4,6 +4,7 @@ import HomeProject from './home/HomeProject';
 import HomeTerrain from './home/HomeTerrain';
 import HomeMeditation from './home/HomeMeditation';
 import AccountMenu from './account/AccountMenu';
+import SyncStatusIndicator from './sync/SyncStatusIndicator';
 
 interface FocusModuleProps {
   activeProject: Project;
@@ -66,7 +67,10 @@ const FocusModule: React.FC<FocusModuleProps> = ({
             </button>
           ))}
         </nav>
-        <AccountMenu onOpenTraffic={onOpenTraffic} onOpenSettings={onOpenSettings} />
+        <div className="flex items-center gap-3">
+          <SyncStatusIndicator />
+          <AccountMenu onOpenTraffic={onOpenTraffic} onOpenSettings={onOpenSettings} />
+        </div>
       </div>
 
       {view === 'project' ? (

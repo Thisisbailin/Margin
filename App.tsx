@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense, lazy } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { SignedIn, SignedOut, SignInButton, useAuth, useUser } from '@clerk/clerk-react';
 import {
@@ -17,10 +17,11 @@ import {
 } from './types';
 import { MOCK_PROJECT } from './constants';
 import { streamAnnotation, streamProjectChat } from './services/llmService';
-import { fetchProjectSnapshot, upsertDocumentSnapshot, upsertProjectSnapshot, uploadEpubToSupabase } from './services/supabaseService';
+import { uploadEpubToSupabase } from './services/supabaseService';
 import { buildDocumentFromBlocks, buildProjectIndexes } from './services/documentBuilder';
 import type { ParsedEpub } from './services/epubService';
 import { fetchClerkToken } from './services/clerkToken';
+import { supabaseSyncAdapter, syncEngine, type SyncSnapshot } from './services/sync';
 import manifesto from './docs/margin-manifesto.md?raw';
 
 const HomeView = lazy(() => import('./Home'));
@@ -122,6 +123,8 @@ const MarginApp: React.FC = () => {
   const [activeProject, setActiveProject] = useState<Project>(MOCK_PROJECT);
   const [activeDocument, setActiveDocument] = useState<Document | undefined>(MOCK_PROJECT.documents[0]);
   const [readingProgress] = useState(0.15);
+  const [isHydrated, setIsHydrated] = useState(false);
+  const skipLocalSyncRef = useRef(false);
 
   const [projectMessages, setProjectMessages] = useState<AgentMessage[]>([]);
   const [projectInput, setProjectInput] = useState('');
@@ -140,39 +143,40 @@ const MarginApp: React.FC = () => {
     }
   }, [getToken]);
 
+  const applyRemoteSnapshot = useCallback((snapshot: SyncSnapshot) => {
+    skipLocalSyncRef.current = true;
+    setActiveProject(snapshot.project);
+    const nextDoc =
+      snapshot.activeDocumentId
+        ? snapshot.documents.find((doc) => doc.id === snapshot.activeDocumentId)
+        : snapshot.documents[0];
+    setActiveDocument(nextDoc);
+    syncEngine.setLocalSnapshot(snapshot, { source: 'remote' });
+  }, []);
+
+  useEffect(() => {
+    syncEngine.configure({ adapter: supabaseSyncAdapter, getToken: getAuthToken });
+    syncEngine.setApplyRemoteSnapshot(applyRemoteSnapshot);
+  }, [getAuthToken, applyRemoteSnapshot]);
+
+  useEffect(() => {
+    syncEngine.setUser(user?.id);
+    if (!user?.id) {
+      setIsHydrated(false);
+    }
+  }, [user?.id]);
+
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
 
     const hydrateFromSupabase = async () => {
-      const token = await getAuthToken();
-      if (!token) return;
-      const snapshot = await fetchProjectSnapshot(token);
-      if (cancelled || !snapshot) return;
-
-      const { project, documents } = snapshot;
-      if (!documents.length) return;
-
-      const { occurrenceIndex, lexemeIndex, interactionLog } = buildProjectIndexes(
-        documents,
-        project.lexeme_index || undefined,
-        project.interaction_log || undefined
-      );
-
-      const nextProject: Project = {
-        id: project.id,
-        name: project.name || 'Margin Project',
-        description: project.description || '',
-        documents,
-        occurrenceIndex,
-        lexemeIndex,
-        interactionLog
-      };
-
-      setActiveProject(nextProject);
-      const nextDoc =
-        documents.find((doc) => doc.id === project.active_document_id) || documents[0];
-      setActiveDocument(nextDoc);
+      const snapshot = await syncEngine.pullLatest();
+      if (cancelled) return;
+      if (snapshot) {
+        applyRemoteSnapshot(snapshot);
+      }
+      setIsHydrated(true);
     };
 
     hydrateFromSupabase();
@@ -180,7 +184,24 @@ const MarginApp: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, getAuthToken]);
+  }, [user?.id, applyRemoteSnapshot]);
+
+  useEffect(() => {
+    if (!user?.id || !isHydrated) return;
+    if (skipLocalSyncRef.current) {
+      skipLocalSyncRef.current = false;
+      return;
+    }
+    if (!activeProject.documents.length) return;
+    syncEngine.setLocalSnapshot(
+      {
+        project: activeProject,
+        documents: activeProject.documents,
+        activeDocumentId: activeDocument?.id
+      },
+      { source: 'local' }
+    );
+  }, [activeProject, activeDocument?.id, isHydrated, user?.id]);
 
   const handleDocumentSelect = useCallback((document: Document) => {
     setActiveDocument(document);
@@ -314,11 +335,13 @@ const MarginApp: React.FC = () => {
         interactionLog: indexes.interactionLog
       };
 
-      await upsertProjectSnapshot(nextProject, token, newDocument.id);
-      await Promise.all(
-        nextDocuments.map((doc) => upsertDocumentSnapshot(doc, nextProject.id, token))
+      syncEngine.setLocalSnapshot(
+        { project: nextProject, documents: nextDocuments, activeDocumentId: newDocument.id },
+        { source: 'local' }
       );
+      await syncEngine.syncNow('import');
 
+      skipLocalSyncRef.current = true;
       setActiveProject(nextProject);
       setActiveDocument(newDocument);
       setLeftPanelState('collapsed');

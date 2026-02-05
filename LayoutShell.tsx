@@ -30,6 +30,10 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
   const [width, setWidth] = useState(380);
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768;
+  });
 
   const startResizing = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -66,7 +70,16 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
     };
   }, [isResizing, side]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   if (state === 'collapsed') {
+    if (isMobile) return null;
     return (
       <aside className="relative transition-all duration-700 ease-[cubic-bezier(0.25,0.8,0.25,1)] overflow-hidden opacity-0 w-full md:w-0 h-0 md:h-full"></aside>
     );
@@ -85,10 +98,63 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
     );
   }
 
+  if (isMobile) {
+    return (
+      <>
+        <button
+          className="fixed inset-0 z-[45] bg-ink/20 backdrop-blur-[1px]"
+          aria-label="Close panel"
+          onClick={() => onStateChange('collapsed')}
+        />
+        <aside
+          ref={sidebarRef}
+          className={`
+            fixed left-0 right-0 bottom-0 z-50
+            bg-surface/95 backdrop-blur-md
+            border-t border-black/10
+            rounded-t-[2rem]
+            h-[70vh]
+            pb-[env(safe-area-inset-bottom)]
+            animate-fade-in
+            flex flex-col overflow-hidden
+          `}
+        >
+          <div className="pt-3 pb-2 flex items-center justify-center">
+            <div className="w-10 h-1 rounded-full bg-black/10" />
+          </div>
+          <div className="flex justify-between items-center px-6 h-12 border-b border-black/5 flex-shrink-0 bg-paper/50 backdrop-blur-sm sticky top-0 z-20">
+            <div className="flex-1 flex items-center min-w-0 mr-4">
+              {headerContent}
+            </div>
+            <div className="flex items-center gap-2 text-gray-400">
+              {collapsedPeerTrigger && (
+                <>
+                  <button onClick={collapsedPeerTrigger.onClick} className="text-gray-400 hover:text-accent transition-colors p-1.5 rounded hover:bg-accent/10" title={collapsedPeerTrigger.label}>
+                    <span className="w-4 h-4">{collapsedPeerTrigger.icon}</span>
+                  </button>
+                  <div className="h-3 w-px bg-gray-200 mx-1"></div>
+                </>
+              )}
+              <button onClick={() => onStateChange('expanded')} className="p-1.5 hover:text-ink transition-colors rounded hover:bg-black/5" title="Maximize">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" /></svg>
+              </button>
+              <button onClick={() => onStateChange('collapsed')} className="p-1.5 hover:text-ink transition-colors rounded hover:bg-black/5" title="Collapse">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d={side === 'left' ? "M15.75 19.5L8.25 12l7.5-7.5" : "M8.25 4.5l7.5 7.5-7.5 7.5"} /></svg>
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 relative overflow-hidden flex flex-col">
+            {children}
+          </div>
+        </aside>
+      </>
+    );
+  }
+
   return (
-    <aside 
+    <aside
       ref={sidebarRef}
-      style={{ width: window.innerWidth >= 768 ? width : '100%' }}
+      style={{ width }}
       className={`
         flex-shrink-0 flex flex-col 
         bg-surface/80 backdrop-blur-md 
@@ -106,7 +172,7 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
       <div className="flex flex-col h-full w-full animate-fade-in relative overflow-hidden">
         <div className="flex justify-between items-center px-6 h-12 border-b border-black/5 flex-shrink-0 bg-paper/50 backdrop-blur-sm sticky top-0 z-20">
           <div className="flex-1 flex items-center min-w-0 mr-4">
-             {headerContent}
+            {headerContent}
           </div>
           <div className="flex items-center gap-2 text-gray-400">
             {collapsedPeerTrigger && (
@@ -121,12 +187,12 @@ const LayoutShell: React.FC<LayoutShellProps> = ({
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" /></svg>
             </button>
             <button onClick={() => onStateChange('collapsed')} className="p-1.5 hover:text-ink transition-colors rounded hover:bg-black/5" title="Collapse">
-               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d={side === 'left' ? "M15.75 19.5L8.25 12l7.5-7.5" : "M8.25 4.5l7.5 7.5-7.5 7.5"} /></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d={side === 'left' ? "M15.75 19.5L8.25 12l7.5-7.5" : "M8.25 4.5l7.5 7.5-7.5 7.5"} /></svg>
             </button>
           </div>
         </div>
         <div className="flex-1 relative overflow-hidden flex flex-col">
-           {children}
+          {children}
         </div>
       </div>
     </aside>
