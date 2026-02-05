@@ -47,6 +47,8 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
 }) => {
   const [activeTocEntryId, setActiveTocEntryId] = React.useState<string | null>(null);
   const [isMobile, setIsMobile] = React.useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
+  const [mobileTab, setMobileTab] = React.useState<'landscape' | 'margin'>('landscape');
+  const mobileSheetRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -56,19 +58,71 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const toggleLeftPanel = () => {
-    const nextState = leftPanelState === 'collapsed' ? 'default' : 'collapsed';
-    onLeftPanelStateChange(nextState);
-    if (isMobile && nextState !== 'collapsed') {
+  const openMobileSheet = (tab: 'landscape' | 'margin') => {
+    setMobileTab(tab);
+    if (tab === 'landscape') {
+      onLeftPanelStateChange('default');
       onRightPanelStateChange('collapsed');
+    } else {
+      onRightPanelStateChange('default');
+      onLeftPanelStateChange('collapsed');
     }
   };
 
+  const closeMobileSheet = () => {
+    onLeftPanelStateChange('collapsed');
+    onRightPanelStateChange('collapsed');
+  };
+
+  const toggleLeftPanel = () => {
+    if (isMobile) {
+      if (leftPanelState !== 'collapsed') {
+        closeMobileSheet();
+      } else {
+        openMobileSheet('landscape');
+      }
+      return;
+    }
+    onLeftPanelStateChange(leftPanelState === 'collapsed' ? 'default' : 'collapsed');
+  };
+
   const toggleRightPanel = () => {
-    const nextState = rightPanelState === 'collapsed' ? 'default' : 'collapsed';
-    onRightPanelStateChange(nextState);
-    if (isMobile && nextState !== 'collapsed') {
-      onLeftPanelStateChange('collapsed');
+    if (isMobile) {
+      if (rightPanelState !== 'collapsed') {
+        closeMobileSheet();
+      } else {
+        openMobileSheet('margin');
+      }
+      return;
+    }
+    onRightPanelStateChange(rightPanelState === 'collapsed' ? 'default' : 'collapsed');
+  };
+
+  const isMobileSheetOpen = isMobile && (leftPanelState !== 'collapsed' || rightPanelState !== 'collapsed');
+
+  React.useEffect(() => {
+    if (!isMobileSheetOpen) return;
+    const container = mobileSheetRef.current;
+    if (!container) return;
+    const width = container.clientWidth;
+    const targetLeft = mobileTab === 'landscape' ? 0 : width;
+    container.scrollTo({ left: targetLeft, behavior: 'smooth' });
+  }, [mobileTab, isMobileSheetOpen]);
+
+  const handleMobileSheetScroll = () => {
+    const container = mobileSheetRef.current;
+    if (!container) return;
+    const width = container.clientWidth || 1;
+    const nextTab = container.scrollLeft > width * 0.5 ? 'margin' : 'landscape';
+    if (nextTab !== mobileTab) {
+      setMobileTab(nextTab);
+      if (nextTab === 'landscape') {
+        onLeftPanelStateChange('default');
+        onRightPanelStateChange('collapsed');
+      } else {
+        onRightPanelStateChange('default');
+        onLeftPanelStateChange('collapsed');
+      }
     }
   };
 
@@ -188,37 +242,39 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
 
   return (
     <div className="h-screen w-screen bg-paper text-ink font-sans flex flex-col md:flex-row overflow-hidden relative">
-      <LayoutShell
-        side="left"
-        state={leftPanelState}
-        onStateChange={onLeftPanelStateChange}
-        title="Landscape"
-        headerContent={<div className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent">Landscape</div>}
-      >
-        <div className="p-8 h-full flex flex-col gap-6">
-          <button
-            onClick={onEnterHome}
-            className="w-full py-3.5 bg-surface border border-black/5 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-ink hover:bg-white hover:shadow-soft transition-all flex items-center justify-center gap-2"
-          >
-            Back To Home
-          </button>
-          <div className="flex-1 overflow-y-auto no-scrollbar space-y-10 pr-2">
-            {activeDocument && (
-              <DocumentToc
-                toc={activeDocument.toc}
-                onSelect={handleTocSelect}
-                activeEntryId={activeTocEntryId}
+      {!isMobile && (
+        <LayoutShell
+          side="left"
+          state={leftPanelState}
+          onStateChange={onLeftPanelStateChange}
+          title="Landscape"
+          headerContent={<div className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent">Landscape</div>}
+        >
+          <div className="p-8 h-full flex flex-col gap-6">
+            <button
+              onClick={onEnterHome}
+              className="w-full py-3.5 bg-surface border border-black/5 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-ink hover:bg-white hover:shadow-soft transition-all flex items-center justify-center gap-2"
+            >
+              Back To Home
+            </button>
+            <div className="flex-1 overflow-y-auto no-scrollbar space-y-10 pr-2">
+              {activeDocument && (
+                <DocumentToc
+                  toc={activeDocument.toc}
+                  onSelect={handleTocSelect}
+                  activeEntryId={activeTocEntryId}
+                />
+              )}
+              <ProjectContext
+                project={activeProject}
+                activeDocumentId={activeDocument?.id}
+                onDocumentSelect={onDocumentSelect}
+                showImport={false}
               />
-            )}
-            <ProjectContext
-              project={activeProject}
-              activeDocumentId={activeDocument?.id}
-              onDocumentSelect={onDocumentSelect}
-              showImport={false}
-            />
+            </div>
           </div>
-        </div>
-      </LayoutShell>
+        </LayoutShell>
+      )}
 
       <main
         className={`h-full w-full overflow-y-auto no-scrollbar flex-1 relative transition-all duration-700 ${
@@ -311,21 +367,94 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
         </div>
       </div>
 
-      <LayoutShell
-        side="right"
-        state={rightPanelState}
-        onStateChange={onRightPanelStateChange}
-        title="Margin"
-        headerContent={
-          <div className="flex items-center justify-between w-full pr-4">
-            <span className="font-display text-2xl italic text-ink">Margin</span>
+      {!isMobile && (
+        <LayoutShell
+          side="right"
+          state={rightPanelState}
+          onStateChange={onRightPanelStateChange}
+          title="Margin"
+          headerContent={
+            <div className="flex items-center justify-between w-full pr-4">
+              <span className="font-display text-2xl italic text-ink">Margin</span>
+            </div>
+          }
+        >
+          <div className="flex-1 overflow-y-auto no-scrollbar px-7 pb-20">
+            <MarginSidebar messages={messages} isLoading={isAiLoading} proficiency={userProficiency} />
           </div>
-        }
-      >
-        <div className="flex-1 overflow-y-auto no-scrollbar px-7 pb-20">
-          <MarginSidebar messages={messages} isLoading={isAiLoading} proficiency={userProficiency} />
-        </div>
-      </LayoutShell>
+        </LayoutShell>
+      )}
+
+      {isMobileSheetOpen && (
+        <>
+          <button
+            className="fixed inset-0 z-[45] bg-ink/25 backdrop-blur-[1px]"
+            aria-label="Close panel"
+            onClick={closeMobileSheet}
+          />
+          <div className="fixed left-0 right-0 bottom-0 z-50 bg-surface/95 backdrop-blur-md border-t border-black/10 rounded-t-[2rem] h-[72vh] pb-[env(safe-area-inset-bottom)] flex flex-col overflow-hidden animate-fade-in">
+            <div className="pt-3 pb-2 flex items-center justify-center">
+              <div className="w-10 h-1 rounded-full bg-black/10" />
+            </div>
+            <div className="px-6 pb-3 flex items-center justify-between gap-3">
+              <button
+                onClick={() => openMobileSheet('landscape')}
+                className={`flex-1 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest border transition ${
+                  mobileTab === 'landscape'
+                    ? 'bg-ink text-white border-ink'
+                    : 'bg-white/70 text-ink border-black/5 hover:border-accent/30'
+                }`}
+              >
+                目录 / 项目
+              </button>
+              <button
+                onClick={() => openMobileSheet('margin')}
+                className={`flex-1 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest border transition ${
+                  mobileTab === 'margin'
+                    ? 'bg-ink text-white border-ink'
+                    : 'bg-white/70 text-ink border-black/5 hover:border-accent/30'
+                }`}
+              >
+                边注 / 对话
+              </button>
+            </div>
+            <div
+              ref={mobileSheetRef}
+              onScroll={handleMobileSheetScroll}
+              className="flex-1 flex overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar"
+            >
+              <div className="snap-start shrink-0 w-full h-full overflow-y-auto no-scrollbar px-6 pb-16">
+                <div className="pt-2 flex flex-col gap-6">
+                  <button
+                    onClick={onEnterHome}
+                    className="w-full py-3.5 bg-white/80 border border-black/5 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-ink hover:bg-white hover:shadow-soft transition-all flex items-center justify-center gap-2"
+                  >
+                    Back To Home
+                  </button>
+                  {activeDocument && (
+                    <DocumentToc
+                      toc={activeDocument.toc}
+                      onSelect={handleTocSelect}
+                      activeEntryId={activeTocEntryId}
+                    />
+                  )}
+                  <ProjectContext
+                    project={activeProject}
+                    activeDocumentId={activeDocument?.id}
+                    onDocumentSelect={onDocumentSelect}
+                    showImport={false}
+                  />
+                </div>
+              </div>
+              <div className="snap-start shrink-0 w-full h-full overflow-y-auto no-scrollbar px-6 pb-16">
+                <div className="pt-2">
+                  <MarginSidebar messages={messages} isLoading={isAiLoading} proficiency={userProficiency} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
