@@ -48,7 +48,15 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
   const [activeTocEntryId, setActiveTocEntryId] = React.useState<string | null>(null);
   const [isMobile, setIsMobile] = React.useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
   const [mobileTab, setMobileTab] = React.useState<'landscape' | 'margin'>('landscape');
+  const [sheetOffsetY, setSheetOffsetY] = React.useState(0);
+  const [isDraggingSheet, setIsDraggingSheet] = React.useState(false);
+  const [isClosingSheet, setIsClosingSheet] = React.useState(false);
+  const [renderSheet, setRenderSheet] = React.useState(false);
+  const [sheetHeight, setSheetHeight] = React.useState(0);
   const mobileSheetRef = React.useRef<HTMLDivElement | null>(null);
+  const sheetContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const dragStartYRef = React.useRef(0);
+  const dragStartOffsetRef = React.useRef(0);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -74,10 +82,27 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
     onRightPanelStateChange('collapsed');
   };
 
+  const requestCloseSheet = () => {
+    if (!renderSheet) {
+      closeMobileSheet();
+      return;
+    }
+    const height = sheetContainerRef.current?.clientHeight || sheetHeight || 360;
+    setIsClosingSheet(true);
+    setIsDraggingSheet(false);
+    setSheetOffsetY(height);
+    window.setTimeout(() => {
+      closeMobileSheet();
+      setIsClosingSheet(false);
+      setRenderSheet(false);
+      setSheetOffsetY(0);
+    }, 280);
+  };
+
   const toggleLeftPanel = () => {
     if (isMobile) {
       if (leftPanelState !== 'collapsed') {
-        closeMobileSheet();
+        requestCloseSheet();
       } else {
         openMobileSheet('landscape');
       }
@@ -89,7 +114,7 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
   const toggleRightPanel = () => {
     if (isMobile) {
       if (rightPanelState !== 'collapsed') {
-        closeMobileSheet();
+        requestCloseSheet();
       } else {
         openMobileSheet('margin');
       }
@@ -99,6 +124,23 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
   };
 
   const isMobileSheetOpen = isMobile && (leftPanelState !== 'collapsed' || rightPanelState !== 'collapsed');
+
+  React.useEffect(() => {
+    if (isMobileSheetOpen) {
+      setRenderSheet(true);
+      setIsClosingSheet(false);
+      setSheetOffsetY(40);
+      requestAnimationFrame(() => setSheetOffsetY(0));
+    } else if (!isClosingSheet) {
+      setRenderSheet(false);
+    }
+  }, [isMobileSheetOpen, isClosingSheet]);
+
+  React.useEffect(() => {
+    if (!renderSheet) return;
+    const height = sheetContainerRef.current?.clientHeight || 0;
+    if (height) setSheetHeight(height);
+  }, [renderSheet, messages.length, activeDocument?.id]);
 
   React.useEffect(() => {
     if (!isMobileSheetOpen) return;
@@ -123,6 +165,36 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
         onRightPanelStateChange('default');
         onLeftPanelStateChange('collapsed');
       }
+    }
+  };
+
+  const handleSheetDragStart = (event: React.TouchEvent) => {
+    if (event.touches.length !== 1) return;
+    dragStartYRef.current = event.touches[0].clientY;
+    dragStartOffsetRef.current = sheetOffsetY;
+    setIsDraggingSheet(true);
+  };
+
+  const handleSheetDragMove = (event: React.TouchEvent) => {
+    if (!isDraggingSheet) return;
+    const delta = event.touches[0].clientY - dragStartYRef.current;
+    if (delta <= 0) {
+      setSheetOffsetY(0);
+      return;
+    }
+    event.preventDefault();
+    setSheetOffsetY(delta + dragStartOffsetRef.current);
+  };
+
+  const handleSheetDragEnd = () => {
+    if (!isDraggingSheet) return;
+    setIsDraggingSheet(false);
+    const height = sheetContainerRef.current?.clientHeight || sheetHeight || 360;
+    const threshold = Math.min(180, height * 0.35);
+    if (sheetOffsetY > threshold) {
+      requestCloseSheet();
+    } else {
+      setSheetOffsetY(0);
     }
   };
 
@@ -385,16 +457,29 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
         </LayoutShell>
       )}
 
-      {isMobileSheetOpen && (
+      {renderSheet && (
         <>
           <button
-            className="fixed inset-0 z-[45] bg-ink/25 backdrop-blur-[1px]"
+            className="fixed inset-0 z-[45] bg-ink/25 backdrop-blur-[1px] transition-opacity duration-300"
+            style={{ opacity: Math.max(0, 1 - sheetOffsetY / Math.max(sheetHeight || 1, 1)) }}
             aria-label="Close panel"
-            onClick={closeMobileSheet}
+            onClick={requestCloseSheet}
           />
-          <div className="fixed left-0 right-0 bottom-0 z-50 bg-surface/95 backdrop-blur-md border-t border-black/10 rounded-t-[2rem] h-[72vh] pb-[env(safe-area-inset-bottom)] flex flex-col overflow-hidden animate-fade-in">
-            <div className="pt-3 pb-2 flex items-center justify-center">
-              <div className="w-10 h-1 rounded-full bg-black/10" />
+          <div
+            ref={sheetContainerRef}
+            className="fixed left-0 right-0 bottom-0 z-50 bg-surface/95 backdrop-blur-md border-t border-black/10 rounded-t-[2rem] h-[60vh] pb-[env(safe-area-inset-bottom)] flex flex-col overflow-hidden"
+            style={{
+              transform: `translateY(${sheetOffsetY}px)`,
+              transition: isDraggingSheet ? 'none' : 'transform 280ms cubic-bezier(0.22, 0.61, 0.36, 1)'
+            }}
+          >
+            <div
+              className="pt-3 pb-2 flex items-center justify-center"
+              onTouchStart={handleSheetDragStart}
+              onTouchMove={handleSheetDragMove}
+              onTouchEnd={handleSheetDragEnd}
+            >
+              <div className="w-12 h-1.5 rounded-full bg-black/10" />
             </div>
             <div className="px-6 pb-3 flex items-center justify-between gap-3">
               <button
@@ -423,7 +508,7 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
               onScroll={handleMobileSheetScroll}
               className="flex-1 flex overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar"
             >
-              <div className="snap-start shrink-0 w-full h-full overflow-y-auto no-scrollbar px-6 pb-16">
+              <div className="snap-start shrink-0 w-full h-full overflow-y-auto no-scrollbar px-6 pb-16" style={{ WebkitOverflowScrolling: 'touch' }}>
                 <div className="pt-2 flex flex-col gap-6">
                   <button
                     onClick={onEnterHome}
@@ -446,7 +531,7 @@ const ReaderPage: React.FC<ReaderPageProps> = ({
                   />
                 </div>
               </div>
-              <div className="snap-start shrink-0 w-full h-full overflow-y-auto no-scrollbar px-6 pb-16">
+              <div className="snap-start shrink-0 w-full h-full overflow-y-auto no-scrollbar px-6 pb-16" style={{ WebkitOverflowScrolling: 'touch' }}>
                 <div className="pt-2">
                   <MarginSidebar messages={messages} isLoading={isAiLoading} proficiency={userProficiency} />
                 </div>
